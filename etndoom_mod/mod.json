@@ -1,0 +1,10 @@
+{
+  "id": "etndoom_stage0",
+  "name": "ETNDOOM Stage0 开发测试",
+  "version": "0.3.0",
+  "author": "ETNDOOM",
+  "description": "阶段 0.1/0.2 俯视基线与 0.3 侧方正交测试；0.3 入口 --stage0=0.3 --stage0-collision=on，需要外部 DOOM2.WAD。",
+  "api_version": 1,
+  "game_version": "v0.5.2.0",
+  "entry": "res://mods/etndoom_stage0/entry/stage0_entry.gd"
+}

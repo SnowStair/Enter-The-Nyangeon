@@ -1,0 +1,10 @@
+{
+  "id": "etndoom_m1",
+  "name": "ETNDOOM M1",
+  "version": "0.1.0",
+  "author": "ETNDOOM",
+  "description": "Crispy Doom 单人运行时：流程、存档、音频与完整数据；使用 --etndoom=m1 启动。",
+  "api_version": 1,
+  "game_version": "v0.5.2.0",
+  "entry": "res://mods/etndoom_m1/entry/m1_entry.gd"
+}

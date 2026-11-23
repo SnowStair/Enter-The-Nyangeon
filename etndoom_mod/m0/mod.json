@@ -1,0 +1,10 @@
+{
+  "id": "etndoom_m0",
+  "name": "ETNDOOM M0",
+  "version": "0.0.1",
+  "author": "ETNDOOM",
+  "description": "Crispy Doom 7.2 移植验证；使用 --etndoom=m0 启动。",
+  "api_version": 1,
+  "game_version": "v0.5.2.0",
+  "entry": "res://mods/etndoom_m0/entry/m0_entry.gd"
+}

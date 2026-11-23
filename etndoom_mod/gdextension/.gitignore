@@ -1,0 +1,10 @@
+# 接口头与 bridge.c 入库；API 导出、临时探针工程和编译产物不入库
+/extension_api.json
+/build/
+*.dll
+*.o
+*.obj
+*.a
+*.lib
+*.exp
+*.pdb

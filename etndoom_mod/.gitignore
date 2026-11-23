@@ -1,0 +1,12 @@
+/build/
+/wad/DOOM2.WAD
+*.uid
+
+# native/.gitignore 排除构建目录、解压源及依赖下载；补充零散编译产物
+/native/**/*.o
+/native/**/*.obj
+/native/**/*.a
+/native/**/*.lib
+/native/**/*.dll
+/native/**/*.exe
+/native/**/*.pdb

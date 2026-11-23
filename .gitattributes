@@ -1,3 +1,7 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
 ETN_*localization.csv text eol=crlf
+
+# Preserve third-party license bytes in the vendored source archive.
+etndoom_mod/vendor/Crispy-Doom-COPYING.md -text -eol whitespace=-blank-at-eol,-blank-at-eof
+etndoom_mod/vendor/SDL2-LICENSE.txt -text -eol whitespace=-blank-at-eol,-blank-at-eof

@@ -1,0 +1,48 @@
+{
+  "crispy_doom": {
+    "repository": "https://github.com/fabiangreffrath/crispy-doom.git",
+    "commit": "35b49519fb4f0360ee1527e8cf0bdf0b6bbfeff2",
+    "describe": "crispy-doom-7.2-1-g35b49519",
+    "archive": "crispy-doom-35b49519.tar.gz",
+    "sha256": "3e15a65dbb3602447465dd543eef8892c834e7ab026149fa3ded92caa8096b46",
+    "license": "GPL-2.0-or-later",
+    "license_file": "Crispy-Doom-COPYING.md",
+    "modifications": "../build_native.py",
+    "modified_date": "2026-11-19"
+  },
+  "sdl2": {
+    "version": "2.32.10",
+    "commit": "5d249570393f7a37e037abf22cd6012a4cc56a71",
+    "url": "https://www.libsdl.org/release/SDL2-devel-2.32.10-mingw.tar.gz",
+    "archive": "../native/downloads/SDL2-devel-2.32.10-mingw.tar.gz",
+    "sha256": "83a5d74012311edc3c0d40ea6faecbe57ad692aa033fa5dc273cc937e3938ff2",
+    "dll_sha256": "53e8fa7e9ed43c30bd650c39396f0d9d2067d2fff0b926c9433b75202592e4aa",
+    "license": "Zlib",
+    "license_file": "SDL2-LICENSE.txt",
+    "link": "dynamic",
+    "target": "x86_64-w64-mingw32"
+  },
+  "toolchain": {
+    "compiler": "GCC 16.2.0 MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r1",
+    "flags": [
+      "-O3",
+      "-fwrapv",
+      "-fno-strict-aliasing",
+      "-static-libgcc"
+    ],
+    "crt": "Windows UCRT",
+    "note": "二进制与工具链版本、实际命令和全部源码哈希由 native/build/build-lock.json 记录。商业 WAD 不包含在依赖包。"
+  },
+  "sdl2_mixer": {
+    "version": "2.8.1",
+    "url": "https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.8.1/SDL2_mixer-devel-2.8.1-mingw.tar.gz",
+    "archive": "SDL2_mixer-devel-2.8.1-mingw.tar.gz",
+    "sha256": "b6c98eecd308aa9922ede0aac466bb5dea6c3e9b9b59dd496009f778c90d83d7",
+    "dll_sha256": "413b12a560f4748123e1099bd22f0c75526a7ab28d92b92cfe34f0b468ffc75a",
+    "license": "Zlib",
+    "license_file": "SDL2_mixer-LICENSE.txt",
+    "link": "dynamic",
+    "target": "x86_64-w64-mingw32",
+    "audio_route": "Crispy SFX + software OPL using the active IWAD GENMIDI; no external music packs or SoundFont"
+  }
+}

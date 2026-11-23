@@ -17,3 +17,14 @@ addons/godot-rapier2d/bin/~*
 outline_test.tscn
 test_upgrade.*
 skills-lock.json
+
+# ETNDOOM local data and generated files
+/.migration/
+/release/
+/.vscode/
+/etndoom_mod/wad/DOOM2.WAD
+__pycache__/
+*.py[cod]
+/ETNDOOM/.obsidian/
+/ETNDOOM/.trash/
+/mod_sdk/mobile_hotfix/

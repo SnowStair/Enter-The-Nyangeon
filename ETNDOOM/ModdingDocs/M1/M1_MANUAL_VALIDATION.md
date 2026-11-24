@@ -1,14 +1,14 @@
 # M1 Manual Validation / M1 人工验证入口
 
-> Date / 日期：2026-11-19。
+> Date / 日期：2026-11-23（fork 迁移入口更新；原检查单 2026-11-19）。
 > Source / 来源：code（M1 实际入口与操作控件）。
 > Status / 状态：人工检查单；**尚未取得用户人工验收结论**。自动结果另见 [M1 验收](M1_VALIDATION.md)。
 
 ## 1. Launch / 启动
 
-本轮已安装五组最终构建，无需用户重新构建。直接双击 `E:\ETN_DOOM\tests\m1_manual\启动M1人工验证.cmd`，选择纯Doom、DSS E2、DSS E4、自制跳跃或Doom II。统一索引为 [本地人工入口](../../../tests/m1_manual/README.md)，每个入口使用独立用户目录。
+2026-11-23 已在 fork 新目录重新安装五组构建；旧目录的 2026-11-19 启动器保留为历史。直接双击 `E:\Enter-The-Nyangeon-ETNDoom\tests\m1_manual\启动M1人工验证.cmd`，选择纯Doom、DSS E2、DSS E4、自制跳跃或Doom II。统一索引为 [本地人工入口](../../../tests/m1_manual/README.md)，每个入口使用独立用户目录。
 
-需要重新生成时，在 `E:\ETN_DOOM` 打开PowerShell，先构建再选择入口：
+需要重新生成时，在 `E:\Enter-The-Nyangeon-ETNDoom` 打开PowerShell，先构建再选择入口：
 
 ```powershell
 py -3 etndoom_mod/build_native.py --all

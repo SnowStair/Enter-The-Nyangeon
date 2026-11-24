@@ -1,5 +1,7 @@
 # Project Map / 项目地图
 
+> Fork Migration / fork 迁移（2026-11-23，来源：user | code | test）：开发根目录改为 `E:\Enter-The-Nyangeon-ETNDoom`，分支 `Rev`。初始迁入提交 `b203a59`；当前依赖、隔离构建、兼容验证与边界见 [MIGRATION.md](MIGRATION.md)。下方旧目录与阶段证据保留历史含义。
+
 > M1 Implementation / M1 实施（2026-11-22，来源：user | code | test）：新增 `etndoom_mod/m1/`、`entry/m1_entry.gd`、`gdextension/bridge_m1.c`、`build_m1.py`；原生 ABI 2、流程控制、事务存档、完整观察/资源与 SDL_mixer/OPL 音频已接通。**阶段1（M1）实现完成，但验收未完成**；自动回归已通过，人工入口已就绪、待用户验收；入口见 [M1 人工验证](ModdingDocs/M1/M1_MANUAL_VALIDATION.md)，完整数据格式见 [M1_DATA_SCHEMA.md](ModdingDocs/M1/M1_DATA_SCHEMA.md)。SUPERSEDED: 下方 M1 “尚未实施/仅设计”的状态是实施前历史，具体覆盖结论以 [M1 验收](ModdingDocs/M1/M1_VALIDATION.md) 为准。
 
 > M1 Resources / M1 资源补充（2026-11-19，来源：user）：[M1 获准清单](ModdingDocs/M1/M1_VALIDATION.md#21-approved-additions--m1-新增获准资源2026-11-19)新增纯 `doom.wad` 与 `doom.wad + dss/DSS.wad` 正常运行回归；DSS 内嵌 DEHACKED 默认读取，外部 `DSS.deh` 仅参考、不在正常加载列表。许可已确认；SUPERSEDED: 本轮M1运行验证已通过，见顶部实施状态。

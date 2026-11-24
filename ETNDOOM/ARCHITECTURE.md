@@ -39,3 +39,7 @@ Source / 来源：code；运行证据集中在 [M0 探针记录](ModdingDocs/M0/
 原生缓存为 `user://etndoom_m0/native/<manifest_sha256>/`，使已加载 DLL 不占用安装器准备交换的 Mod 安装目录。缓存每次使用先验证哈希；缺失/损坏拒绝进入 DOOM，保留菜单及可定位诊断。当前构建成功加载后尝试清理同根下非当前的 64 位十六进制构建目录；链接或其它目录不处理，占用失败保留并报告，下次启动重试。卸载后 entry 不再运行，残留缓存须在宿主完全退出后按显式清理入口处理；不能声称本体安装器会自动删此目录。P5 验证更新、禁用、卸载和失败事务，完整多版本矩阵仍属 M4。
 
 M0 音频输出关闭，原生跳跃是 Crispy 命令/配置；完整音频、存读档、战斗/机关/跨图继承验证归 M1。最终俯视为 M2，既有 Stage0 独立保留，不能把 framebuffer 临时显示记作最终俯视。
+
+## Fork Resource Paths / fork 资源路径（2026-11-23）
+
+Source / 来源：code | test。M0/M1 session 以及 Stage0/Stage03 的外部 WAD 常量统一指向 `E:/Enter-The-Nyangeon-ETNDoom/etndoom_mod/wad/`（`etndoom_mod/m1/session.gd:4` 等）；加载组合、宿主/内核边界不变。这是本机目录迁移，仍需重建 PCK 后安装；不增加任意资源搜索或外部 DEH 自动加载。构建、隔离宿主和覆盖范围见 [MIGRATION.md](MIGRATION.md)，M0/Stage0 本轮未重跑。

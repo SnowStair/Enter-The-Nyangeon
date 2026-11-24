@@ -1,10 +1,10 @@
 extends RefCounted
 
 # 模拟只由 Crispy 运行。这里管理宿主身份、命令与复制后的观察数据。
-const IWAD := "E:/ETN_DOOM/etndoom_mod/wad/DOOM2.WAD"
-const PWAD := "E:/ETN_DOOM/etndoom_mod/wad/MAP01.wad"
-const DOOM := "E:/ETN_DOOM/etndoom_mod/wad/doom.wad"
-const DSS := "E:/ETN_DOOM/etndoom_mod/wad/dss/DSS.wad"
+const IWAD := "E:/Enter-The-Nyangeon-ETNDoom/etndoom_mod/wad/DOOM2.WAD"
+const PWAD := "E:/Enter-The-Nyangeon-ETNDoom/etndoom_mod/wad/MAP01.wad"
+const DOOM := "E:/Enter-The-Nyangeon-ETNDoom/etndoom_mod/wad/doom.wad"
+const DSS := "E:/Enter-The-Nyangeon-ETNDoom/etndoom_mod/wad/dss/DSS.wad"
 const COMMAND_CAPACITY := 1024
 const EVENT_CAPACITY := 256
 static var _session_counter := 0

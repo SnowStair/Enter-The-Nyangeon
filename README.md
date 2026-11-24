@@ -1,3 +1,11 @@
+# ETNDOOM / fork 开发入口
+
+当前开发目录：`E:\Enter-The-Nyangeon-ETNDoom`，分支 `Rev`。Mod 源码见 [etndoom_mod/README.md](etndoom_mod/README.md)，迁移、构建与本地依赖见 [ETNDOOM/MIGRATION.md](ETNDOOM/MIGRATION.md)，人工入口见 [M1 人工验证](ETNDOOM/ModdingDocs/M1/M1_MANUAL_VALIDATION.md)。
+
+M1 迁移兼容检查已通过，人工验收仍未完成。外部 WAD、测试脚本/证据及构建产物仅本地保留，克隆不会自动取得这些文件。下方保留上游 README。
+
+---
+
 ![Enter The Nyangeon 主视觉](ui/ark_of_Shittim/ETN_key_visual.png)
 
 # 挺进喵牢 · Enter The Nyangeon

@@ -1,5 +1,7 @@
 # ETNDOOM Mod / 开发入口
 
+> Fork Workspace / 当前工作区（2026-11-23）：`E:\Enter-The-Nyangeon-ETNDoom`，分支 `Rev`。M1 已在 fork 当前本体通过迁移兼容检查；新依赖、真实宿主来源与覆盖边界见 [迁移记录](../ETNDOOM/MIGRATION.md)。五组人工入口已生成于 `tests/m1_manual/启动M1人工验证.cmd`，仍待用户验收。下方 Stage0 与旧验收中的旧路径仅是历史证据。
+
 ## M1 / 当前开发入口（2026-11-22）
 
 M1 使用独立 Mod ID `etndoom_m1`、ABI 2，接通新游戏/当前图重开/死亡重生、流程确认、暂停、8 个事务存档槽、完整地图/实体/资源观察和 SDL_mixer/OPL 音频。当前构建命令为：
@@ -21,19 +23,18 @@ py -3 tests/run_m1_manual.py --resource dss --episode 2
 当前 M0 使用新 Mod ID `etndoom_m0`，Crispy Doom 7.2-1 固定内核，真实 ETN 发布版安装/运行及自动回归已通过。**M0 已完成，人工验收于 2026-11-18 由用户确认通过**；G1 组合发布授权仍待裁定。完整记录见 [M0 总览](../ETNDOOM/ModdingDocs/M0/README.md)，启动器和检查单见 [人工验证](../ETNDOOM/ModdingDocs/M0/M0_MANUAL_VALIDATION.md)。
 
 ```powershell
-py -3 etndoom_mod/build_native.py --all
-py -3 etndoom_mod/build_m0.py
+# 历史 M0 需要 ABI 1 内核产物；当前 build_native.py 构建 ABI 2，不能混用。
 py -3 tests/run_m0_manual.py --resource fixture --jump
 py -3 tests/run_m0_manual.py --resource doom2
 ```
 
-构建依赖/固定哈希见 `vendor/dependencies.json` 和M0选型§9。默认输出 `build/m0/etndoom_m0.zip`，不包含WAD或本体资源；仅读取已获准的 `E:/ETN_DOOM/etndoom_mod/wad/DOOM2.WAD`，fixture另叠加同目录 `MAP01.wad`。当前为原版软件画面，音频未接入，最终俯视属M2；完整战斗/机关/流程/存档验收属M1。自动入口为本地 `tests/run_m0_checks.py`、`tests/run_m0_negative_checks.py`，最终交付证据为 `tests/m0_results/final_delivery_20261117/delivery.json`。
+构建依赖/固定哈希见 `vendor/dependencies.json` 和M0选型§9。默认输出 `build/m0/etndoom_m0.zip`，不包含WAD或本体资源；当前源码读取已获准的 `E:/Enter-The-Nyangeon-ETNDoom/etndoom_mod/wad/DOOM2.WAD`，fixture另叠加同目录 `MAP01.wad`。当前为原版软件画面，音频未接入，最终俯视属M2；完整战斗/机关/流程/存档验收属M1。自动入口为本地 `tests/run_m0_checks.py`、`tests/run_m0_negative_checks.py`，最终交付证据为 `tests/m0_results/final_delivery_20261117/delivery.json`。
 
 ## Repository / 源码与本地产物
 
 `build_native.py`、`build_m0.py`、`entry/m0_entry.gd`、`m0/`、`native/` 手写源码、`gdextension/` 桥接与接口头、`vendor/` 固定源码包/依赖清单/许可证均入库。`vendor/crispy-doom-35b49519.tar.gz` 是独立构建输入，不能作为普通下载缓存清理。
 
-`build/`、`native/{build,reference_build,core_source,reference_source,dependencies,downloads}/`、`gdextension/build/` 与 API 导出、编译器生成物和 Python 缓存由 `.gitignore` 排除。`tests/`（含最终自动证据与人工入口）、`release/`、`.migration/`、商业 `DOOM2.WAD` 按仓库约定仅本地保存；正式源码、知识库与自制地图不作宽泛忽略。
+`build/`、`native/{build,reference_build,core_source,reference_source,dependencies,downloads}/`、`gdextension/build/` 与 API 导出、编译器生成物和 Python 缓存由 `.gitignore` 排除。`tests/` 的 ETNDOOM 新增脚本/证据/人工入口、`release/`、`.migration/`、外部 IWAD/DSS 按仓库约定仅本地保存；fork 已跟踪的上游测试继续保留；正式源码、知识库与自制地图不作宽泛忽略。
 
 2026-11-18 用户确认：`ETNDOOM/.obsidian/` 整个文件夹仅本地保留，已跟踪的配置和主题移出 Git 索引；10 张已在工作区删除的历史 WAD 纳入本次 M0 提交。现存 `MAP01.wad` 与商业 IWAD 的边界保持上文约定。
 

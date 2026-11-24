@@ -23,6 +23,8 @@ skills-lock.json
 /release/
 /.vscode/
 /etndoom_mod/wad/DOOM2.WAD
+/etndoom_mod/wad/doom.wad
+/etndoom_mod/wad/dss/
 __pycache__/
 *.py[cod]
 /ETNDOOM/.obsidian/

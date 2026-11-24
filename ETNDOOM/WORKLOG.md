@@ -1,4 +1,6 @@
-> Migration / 迁移（2026-10-30）：ETNDOOM 当前开发根目录为 `E:\ETN_DOOM`。本文历史记录中的 `E:\Enter-The-Nyangeon` 路径保留作为当时证据；现行目录与运行入口见 [`docs/MIGRATION.md`](../docs/MIGRATION.md)。
+> Current Workspace / 当前工作区（2026-11-23）：`E:\Enter-The-Nyangeon-ETNDoom` 的 `Rev` 分支；现行入口与迁移结果见 [MIGRATION.md](MIGRATION.md)。下方日期、路径及验证结果保留为历史证据。
+
+> History / 历史迁移（2026-10-30）：ETNDOOM 当时开发根目录为 `E:\ETN_DOOM`。本文历史记录中的 `E:\Enter-The-Nyangeon` 路径保留作为当时证据；当时迁移报告见 [Legacy/MIGRATION.md](Legacy/MIGRATION.md)。
 
 # Worklog / 改动记录
 

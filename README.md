@@ -1,8 +1,8 @@
 # ETNDOOM / fork 开发入口
 
-当前开发目录：`E:\Enter-The-Nyangeon-ETNDoom`，分支 `Rev`。Mod 源码见 [etndoom_mod/README.md](etndoom_mod/README.md)，迁移、构建与本地依赖见 [ETNDOOM/MIGRATION.md](ETNDOOM/MIGRATION.md)，人工入口见 [M1 人工验证](ETNDOOM/ModdingDocs/M1/M1_MANUAL_VALIDATION.md)。
+当前开发目录：`E:\Enter-The-Nyangeon-ETNDoom`，分支 `Rev`。Mod 源码、构建依赖、资源目录与安装运行说明见 [etndoom_mod/README.md](etndoom_mod/README.md)。
 
-M1 迁移兼容检查已通过，人工验收仍未完成。外部 WAD、测试脚本/证据及构建产物仅本地保留，克隆不会自动取得这些文件。下方保留上游 README。
+M1 迁移兼容检查已通过，人工验收仍未完成。`ETNDOOM/` 详细知识库、根目录 `AGENTS.md`、第三方 WAD、ETNDOOM 测试脚本/证据及构建产物仅本地保留，克隆不会自动取得这些文件。第三方资源统一放在 `etndoom_mod/wad/Third Party WAD/`，自制 `MAP01.wad` 继续随仓库保存。下方保留上游项目介绍。
 
 ---
 
@@ -95,7 +95,7 @@ M1 迁移兼容检查已通过，人工验收仍未完成。外部 WAD、测试�
 
 ### 阅读与修改
 
-开始修改前，先阅读 [AGENTS.md](AGENTS.md) 和对应主题文档：
+开始修改前，先阅读下方对应主题文档；若本地存在根目录 `AGENTS.md`，同时遵循其中的开发约定。该文件仅本地维护，不随仓库分发。
 
 | 文档 | 内容 |
 | --- | --- |

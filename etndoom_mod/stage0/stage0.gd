@@ -1,7 +1,7 @@
 extends Node2D
 
 const PLAYER_PATH := "res://scenes/player/momoi/momoi.tscn"
-const SOURCE_WAD := "E:/Enter-The-Nyangeon-ETNDoom/etndoom_mod/wad/DOOM2.WAD"
+const SOURCE_WAD := "E:/Enter-The-Nyangeon-ETNDoom/etndoom_mod/wad/Third Party WAD/DOOM2.WAD"
 const MAP_PATH := "res://mods/etndoom_stage0/wad/MAP01.wad"
 const PLAYER_SCRIPT := preload("res://mods/etndoom_stage0/stage0/stage0_player.gd")
 const WAD_SCRIPT := preload("res://mods/etndoom_stage0/stage0/stage0_wad.gd")

@@ -165,7 +165,8 @@ func submit_commands(commands: Array) -> Dictionary:
 	last_sequence = sequence
 	return {"ok": true, "accepted": commands.size(), "queued": queue.size()}
 
-func step(count: int = 1) -> Dictionary:
+# 完整快照默认保留供观察消费者；framebuffer 画面显式选择轻量状态。
+func step(count: int = 1, capture_snapshot: bool = true) -> Dictionary:
 	if not running or failed:
 		return _error("state", "会话不可步进")
 	if count < 0 or count > COMMAND_CAPACITY:
@@ -182,9 +183,9 @@ func step(count: int = 1) -> Dictionary:
 		if queue.is_empty() or events.size() >= EVENT_CAPACITY - 4:
 			break
 		var cmd: Dictionary = queue.pop_front()
-		result = _decode(native.call("step_core", cmd.forward_move, cmd.side_move, cmd.angle_turn, cmd.buttons, cmd.arti))
+		result = _decode(native.call("step_core" if capture_snapshot else "step_status_core", cmd.forward_move, cmd.side_move, cmd.angle_turn, cmd.buttons, cmd.arti))
 		if result.has("ok") and not result.ok:
-			var current := _decode(native.call("snapshot_json"))
+			var current := _decode(native.call("status_json"))
 			if not current.get("ok", true) or current.get("observer_failed", false):
 				return _stop_failed_session(result)
 			# 原生参数拒绝不推进 tic，也不销毁可恢复的世界。
@@ -201,13 +202,18 @@ func step(count: int = 1) -> Dictionary:
 			return _stop_failed_session(last_error)
 		if changed:
 			break
-	return {"ok": true, "executed": executed, "next_tic": next_tic, "snapshot": _decorate(result) if executed > 0 else snapshot()}
+	var response := {"ok": true, "executed": executed, "next_tic": next_tic}
+	if capture_snapshot:
+		response["snapshot"] = _decorate(result) if executed > 0 else snapshot()
+	else:
+		response["status"] = _decorate(result if executed > 0 else _decode(native.call("status_json")))
+	return response
 
-func command(values: Dictionary = {}) -> Dictionary:
+func command(values: Dictionary = {}, capture_snapshot: bool = true) -> Dictionary:
 	var cmd := {"session_epoch": session_epoch, "world_epoch": world_epoch, "target_tic": next_tic + queue.size(), "player_slot": 0, "sequence": last_sequence + 1, "forward_move": 0, "side_move": 0, "angle_turn": 0, "buttons": 0, "arti": 0}
 	cmd.merge(values, true)
 	var accepted := submit_commands([cmd])
-	return step(1) if accepted.get("ok", false) else accepted
+	return step(1, capture_snapshot) if accepted.get("ok", false) else accepted
 
 func _check_world(state: Dictionary) -> bool:
 	var identity := str(state.get("world_epoch", ""))
@@ -327,7 +333,7 @@ func _request_flow_action(action: String, arg0: int = 0, arg1: int = 0, arg2: in
 	if response.get("ok", false):
 		queue.clear()
 		snapshot_seq += 1
-		_check_world(_decode(native.call("snapshot_json")))
+		_check_world(_decode(native.call("status_json")))
 		# 换世界先撤销旧世界事件，再发布取消结果，避免它被重建清队列吞掉。
 		var cancelled := str(response.get("cancelled_request_id", "0"))
 		if _pending_requests.has(cancelled):

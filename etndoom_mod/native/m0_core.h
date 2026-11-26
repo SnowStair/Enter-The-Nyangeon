@@ -16,6 +16,8 @@ M0_API const char *m1_control_status(void);
 int m1_is_paused(void);
 M0_API int m0_step(int forward, int side, int turn, int buttons, int arti);
 M0_API const char *m0_snapshot(void);
+/* ABI 2 additive read: bounded flow/world status, without entity/map traversal. */
+M0_API const char *m1_status(void);
 M0_API const char *m0_map(void);
 M0_API int m0_frame(uint8_t *rgba, int capacity);
 M0_API int m0_width(void);

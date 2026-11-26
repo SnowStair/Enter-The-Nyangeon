@@ -2,7 +2,7 @@
 
 ETNDOOM 将 Crispy Doom 单人运行时接入 Enter The Nyangeon。当前开发入口为 **M1**，Mod ID 为 `etndoom_m1`，桥接与内核均使用 **ABI 2**，目标平台为 **Windows x64**。
 
-M1 已实现新游戏、当前图重开、死亡重生、流程确认、暂停、8 个存档槽及 SDL_mixer/OPL 音频。此前已通过 fork 本体的迁移兼容检查，人工验收仍未完成；当前构建用于本地验证，不代表已完成正式组合分发。
+M1 已实现新游戏、当前图重开、死亡重生、流程确认、暂停、8 个存档槽及 SDL_mixer/OPL 音频，已通过 fork 本体的迁移兼容检查。2026-11-26 用户确认 DSS E2M2 性能问题已修复，一般人工回归验证通过；M1 完整阶段验收另行记录，当前构建用于本地验证，不代表已完成正式组合分发。
 
 ## Requirements / 构建环境
 
@@ -73,6 +73,14 @@ DSS 可使用 `--m1-resource=dss --m1-episode=2 --m1-map=1`；自制夹具可使
 正式 Mod 源码、构建脚本、接口头、固定依赖包及许可证、自制 `MAP01.wad` 随仓库保存。原生构建目录、解压源码、下载缓存、生成的 Mod 包与 Python 缓存由各级 `.gitignore` 排除。
 
 `ETNDOOM/` 详细知识库、根目录 `AGENTS.md`、第三方 WAD、`release/`、`.migration/` 及 ETNDOOM 本地测试脚本和证据仅本地保留，克隆仓库不会取得。已有上游跟踪的 `tests/` 文件继续保留；本地 ETNDOOM 测试不属于公开构建流程的前置条件。
+
+## Runtime Observation / 运行观察接口
+
+M1 的 framebuffer 画面使用 `session.command(cmd, false)` 的轻量步进结果，返回 `status`，保留世界代次、时钟、流程和请求完成信息；每 tic 不再生成实体与地图的完整 JSON 快照。35 Hz 模拟、软件绘图、音频更新和事件确认仍按原顺序执行。
+
+`session.command(cmd)`、`session.step(count)` 默认仍返回完整 `snapshot`；显式 `session.snapshot()` 也保持原有数据格式。需要完整观察数据的消费者应自行控制读取频率，大地图的全量快照仍有明显成本。`step(count, false)` 只返回轻量状态，暂停时仍返回 `executed=0`。
+
+轻量接口是 ABI 2 的追加导出 `m1_status`，对应 GDExtension 的 `status_json` / `step_status_core`；原有导出语义不变。必须重新构建内核和 M1 包并配套安装，新桥接在创建会话前拒绝缺少该导出的旧内核。更新后使用新进程；存档绑定内核 DLL 内容哈希，不同内核构建的旧存档会被兼容性预检拒绝。
 
 ## Legacy / 历史阶段
 

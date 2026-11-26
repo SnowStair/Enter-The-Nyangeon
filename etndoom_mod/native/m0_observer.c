@@ -118,6 +118,19 @@ static void specials(char *buf,size_t cap,size_t *n){
     for(i=0;i<MAXCEILINGS;i++)if(activeceilings[i]&&!activeceilings[i]->thinker.function.acp1){ceiling_t *d=activeceilings[i];append(buf,cap,n,"%s{\"kind\":\"ceiling_stasis\",\"valid_mask\":%u,\"values\":[%td,%d,%d,%d,%d,%d,%d,%d,%d]}",first?"":",",511u&~(d->type==raiseToHighest?4u:0u)&~((d->type==lowerToFloor||d->type==lowerAndCrush)?8u:0u),d->sector-sectors,d->type,d->type!=raiseToHighest?d->bottomheight:0,(d->type!=lowerToFloor&&d->type!=lowerAndCrush)?d->topheight:0,d->speed,d->crush,d->direction,d->tag,d->olddirection);first=0;}
     append(buf,cap,n,"]");
 }
+const char *m1_status(void){
+    static char status_buffer[4096];
+    size_t n=0;
+    int valid=world_ready && !world_depth && gamestate==GS_LEVEL;
+    if(!active())return "{\"ok\":false,\"error\":\"NO_ACTIVE_SESSION\"}";
+    append(status_buffer,sizeof(status_buffer),&n,"{\"ok\":true,\"world_epoch\":\"%llu\",\"world_valid\":%s,\"observer_failed\":%s,\"tic\":%d,\"leveltime\":%d,\"gamestate\":%d,\"gameaction\":%d,\"episode\":%d,\"map\":%d",(unsigned long long)world_epoch,valid?"true":"false",observer_failed?"true":"false",gametic,leveltime,gamestate,gameaction,gameepisode,gamemap);
+#ifdef ETN_M0_CORE
+    append(status_buffer,sizeof(status_buffer),&n,",\"control\":%s,\"host_paused\":%s}",m1_control_status(),m1_is_paused()?"true":"false");
+#else
+    append(status_buffer,sizeof(status_buffer),&n,",\"control\":null,\"host_paused\":false}");
+#endif
+    return n>=sizeof(status_buffer)?"{\"ok\":false,\"error\":\"STATUS_CAPACITY\"}":status_buffer;
+}
 const char *m0_snapshot(void){
     size_t n=0;int i,count=0,order=0,first=1,valid=world_ready && !world_depth && gamestate==GS_LEVEL;thinker_t *th;player_t *p=&players[consoleplayer];mobj_t *mo=valid?p->mo:NULL;
     if(!active())return "{\"error\":\"NO_ACTIVE_SESSION\"}";

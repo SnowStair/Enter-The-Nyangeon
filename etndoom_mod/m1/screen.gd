@@ -177,7 +177,7 @@ func advance_seconds(seconds: float) -> Dictionary:
 			requested_weapon = -1
 		var cmd := {"forward_move": (_held(KEY_W) - _held(KEY_S)) * speed, "side_move": (_held(KEY_D) - _held(KEY_A)) * speed, "angle_turn": (_held(KEY_LEFT) - _held(KEY_RIGHT)) * 640, "buttons": buttons, "arti": 128 if entry.options.jump and _held(KEY_SPACE) else 0}
 		cmd.merge(test_input, true)
-		var result: Dictionary = bridge.command(cmd)
+		var result: Dictionary = bridge.command(cmd, false)
 		if not result.get("ok", false):
 			if bridge.running:
 				_set_pause(true)

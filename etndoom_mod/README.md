@@ -2,7 +2,11 @@
 
 ETNDOOM 将 Crispy Doom 单人运行时接入 Enter The Nyangeon。当前开发入口为 **M1**，Mod ID 为 `etndoom_m1`，桥接与内核均使用 **ABI 2**，目标平台为 **Windows x64**。
 
-M1 已实现新游戏、当前图重开、死亡重生、流程确认、暂停、8 个存档槽及 SDL_mixer/OPL 音频，已通过 fork 本体的迁移兼容检查。2026-11-26 用户确认 DSS E2M2 性能问题已修复，一般人工回归验证通过；M1 完整阶段验收另行记录，当前构建用于本地验证，不代表已完成正式组合分发。
+原 M1 内核范围已实现并通过人工验收，包含完整单人流程、事务存档及 SDL_mixer/OPL 音频。当前 `Rev_test` 分支进一步恢复 Crispy Doom 的原生操作体验，用于彻底的 M1 人工回归并供后续开发继续使用；允许加入方便测试的功能。
+
+2026-11-26 本轮交互实现已落盘，涵盖鼠标视角、无调试栏的完整画面、原生 Pause/菜单、游戏内 Options 与四页 Crispness 设置、8 页共 64 个存档槽及测试方案/存档选择入口。用户已确认设置范围为游戏内 Options 和全部四页 Crispness；独立 Setup 工具及其手柄配置不在本轮范围。自动回归与窗口专项通过；用户于 2026-11-27 确认本轮功能实现全部正常，新增范围通过本轮人工验收。
+
+本轮验证包含 4,176 条原接口断言、1,750 tic 独立参考对照、两个真实窗口进程的 287 条交互断言，以及 E/Space 使用机关专项的 484 条断言。纯宿主未加载 M1 时也出现的退出期 Texture RID / RenderingServer 报错仍存在；交互专项没有新增错误。用户已确认本轮功能实现全部正常。当前没有 demo 播放/录制入口，因此 Demo Timer、Timer Direction、Progress Bar 的设置与持久化已接入，但其 demo 运行态效果不属于已验证范围。
 
 ## Requirements / 构建环境
 
@@ -58,7 +62,7 @@ py -3 etndoom_mod/build_m1.py --godot 'D:/Creating/Godot/Godot_v4.7.2-stable_win
 
 1. 在游戏设置的 **MOD** 页导入生成的 `etndoom_m1.zip` 并启用。
 2. 完整退出游戏，再带 M1 参数启动。更新 Mod 后也需要完整退出再启动，以加载匹配的新原生库。
-3. 例如，以下 PowerShell 命令运行 The Ultimate Doom；把示例可执行文件路径换成实际宿主路径：
+3. 例如，以下 PowerShell 命令打开测试入口，并预选 The Ultimate Doom；把示例可执行文件路径换成实际宿主路径：
 
    ```powershell
    & 'C:/Games/Enter The Nyangeon/Enter The Nyangeon.exe' -- --etndoom=m1 --m1-resource=doom
@@ -66,7 +70,25 @@ py -3 etndoom_mod/build_m1.py --godot 'D:/Creating/Godot/Godot_v4.7.2-stable_win
 
 DSS 可使用 `--m1-resource=dss --m1-episode=2 --m1-map=1`；自制夹具可使用 `--m1-resource=fixture --m1-jump=on`。`--m1-skill` 接受 1–5；Doom/DSS 的关卡范围为 E1–E4、M1–M9。未指定 `--etndoom=m1` 时不会进入 M1。
 
-操作：WASD 移动，左右方向键转向，Shift 跑步，Ctrl 或画面左键开火，E 使用，1–7 切换武器；开启跳跃时 Space 跳跃。Esc 暂停，F5 重开本图，Enter 重生/确认，F6/F7 保存/读取当前槽位，F10 返回 ETN，F9 再次进入。
+默认启动面板可选 fixture、Doom、Doom II、DSS E2/E4，调整难度、章节、地图和跳跃配置，再选择新游戏或已有本地存档。面板默认勾选全屏游玩；退出后恢复 ETN 窗口。需要直接运行时追加 `--m1-direct`；加载指定存档可再加 `--m1-load-slot=0..63`，槽位编号从 0 开始。
+
+操作沿用 Crispy 默认键位，并在游玩时保留 `E` 使用机关的兼容操作：
+
+| 输入 | 行为 |
+| --- | --- |
+| 鼠标移动、←/→ | 转动视角 |
+| WASD、↑/↓，Shift | 移动/横移，跑步 |
+| Ctrl 或鼠标左键、E / Space | 开火、使用机关/死亡重生 |
+| 1–7、鼠标滚轮，`/` | 选择武器、切换武器；启用跳跃时 `/` 跳跃 |
+| Tab，Esc，Pause | 自动地图、原生菜单、原生暂停 |
+| F2 / F3，F4 | 存档/读档菜单、音量菜单 |
+| F6 / F9，F10 | 快速保存/快速读取、原生退出确认 |
+
+原生 Quit 返回测试启动面板；面板可返回 ETN，ETN 中 F9 再次打开测试面板。Crispy 画面使用完整视口并遵循原生宽高比校正，不显示宿主工具栏、tic 状态、键位提示、CRT、调试面板或过场覆盖层。游戏内设置通过原生菜单调整；VSync、帧率和 Smooth Pixel Scaling 同步到实际 Godot 显示，平滑像素缩放采用与原生整数放大后线性缩放等价的 shader。返回时恢复宿主窗口、内容缩放、鼠标、显示设置与覆盖层状态。
+
+Options 和四页 Crispness 的配置均已接入。Demo Timer、Timer Direction、Progress Bar 可调整并保存；当前没有 demo 播放/录制入口，其 demo 运行态效果尚未验证。
+
+存档与 Crispy 配置保存在 `user://etndoom_m1/saves/<resource>_<original|jump>/`，与 ETN 主存档隔离。同一用户数据目录可跨进程继续；人工测试脚本若创建新的隔离目录，须使用它生成的同一启动器复开才能看到先前存档。存档为 `m1-slot-N.etns`，保留原生名称与文件时间；读取时严格核验资源与内核 DLL 内容身份。交互存档记录并恢复保存时的 jump/freeaim/overunder 规则。不同构建的旧档保留在原目录，应使用对应旧构建启动器读取。
 
 ## Repository / 入库范围与本地资料
 
@@ -76,11 +98,13 @@ DSS 可使用 `--m1-resource=dss --m1-episode=2 --m1-map=1`；自制夹具可使
 
 ## Runtime Observation / 运行观察接口
 
-M1 的 framebuffer 画面使用 `session.command(cmd, false)` 的轻量步进结果，返回 `status`，保留世界代次、时钟、流程和请求完成信息；每 tic 不再生成实体与地图的完整 JSON 快照。35 Hz 模拟、软件绘图、音频更新和事件确认仍按原顺序执行。
+`Rev_test` 实际游玩经 `m1_input` 接收原始键鼠事件，由 Crispy `G_PrepTiccmd/G_BuildTiccmd` 构建输入，`m1_play_tick` 推进 35 Hz 模拟；`m1_ui_status` 返回菜单、原生暂停与显示设置。对应桥接口为 `input_json`、`play_tick_json`、`ui_status_json`。游戏内菜单和自动地图/秘籍沿原生 responder 路径，宿主不再代写全部玩法输入。
+
+`session.play_tick()` 仍只消费轻量 `status`，保留世界代次、时钟、流程和请求完成信息；每 tic 不生成实体与地图的完整 JSON 快照。交互模式支持原生动态 framebuffer 尺寸与 uncapped 显示；菜单仍响应但不推进世界模拟。原生 Pause 与打开菜单保持不同语义，失焦另由宿主暂停原因管理。
 
 `session.command(cmd)`、`session.step(count)` 默认仍返回完整 `snapshot`；显式 `session.snapshot()` 也保持原有数据格式。需要完整观察数据的消费者应自行控制读取频率，大地图的全量快照仍有明显成本。`step(count, false)` 只返回轻量状态，暂停时仍返回 `executed=0`。
 
-轻量接口是 ABI 2 的追加导出 `m1_status`，对应 GDExtension 的 `status_json` / `step_status_core`；原有导出语义不变。必须重新构建内核和 M1 包并配套安装，新桥接在创建会话前拒绝缺少该导出的旧内核。更新后使用新进程；存档绑定内核 DLL 内容哈希，不同内核构建的旧存档会被兼容性预检拒绝。
+显式 ticcmd 的 `command/step` 路径保留原来的固定配置与缓存读取语义；`m1_status` 对应 `status_json` / `step_status_core`。交互能力是 ABI 2 的追加导出，须重新构建内核和 M1 包并配套安装，新桥接在创建会话前拒绝缺少必需导出的旧内核。更新后使用新进程；不同内核构建的旧存档会被兼容性预检拒绝。
 
 ## Legacy / 历史阶段
 

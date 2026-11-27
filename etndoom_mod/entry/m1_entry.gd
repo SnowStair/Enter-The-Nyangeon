@@ -13,6 +13,12 @@ var previous_scene: Node
 var previous_mouse := Input.MOUSE_MODE_VISIBLE
 var bgm_states: Array[Dictionary] = []
 var reenter: CanvasLayer
+var launcher: CanvasLayer
+var launcher_mouse := Input.MOUSE_MODE_VISIBLE
+var launcher_host_scene: Node
+var launcher_host_process_mode := Node.PROCESS_MODE_INHERIT
+var previous_window: Dictionary = {}
+var host_overlay_states: Array[Dictionary] = []
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -25,11 +31,11 @@ func _ready() -> void:
 		_bootstrap.call_deferred()
 
 static func parse_arguments(args: PackedStringArray) -> Dictionary:
-	var result := {"enabled": false, "probe": false, "resource": "fixture", "jump": false, "skill": 3, "episode": 1, "map": 1, "error": ""}
+	var result := {"enabled": false, "probe": false, "direct": false, "load_slot": -1, "resource": "fixture", "jump": false, "skill": 3, "episode": 1, "map": 1, "error": ""}
 	var seen: Dictionary = {}
 	for arg in args:
 		var key := arg.get_slice("=", 0)
-		if key not in ["--etndoom", "--m1-probe", "--m1-resource", "--m1-jump", "--m1-skill", "--m1-episode", "--m1-map"]:
+		if key not in ["--etndoom", "--m1-probe", "--m1-direct", "--m1-load-slot", "--m1-resource", "--m1-jump", "--m1-skill", "--m1-episode", "--m1-map"]:
 			continue
 		if seen.has(key):
 			result.error = "参数重复：" + key
@@ -43,6 +49,18 @@ static func parse_arguments(args: PackedStringArray) -> Dictionary:
 				result.probe = arg == "--m1-probe"
 				if not result.probe:
 					result.error = "--m1-probe 不接受值"
+			"--m1-direct":
+				result.direct = arg == "--m1-direct"
+				if not result.direct:
+					result.error = "--m1-direct 不接受值"
+			"--m1-load-slot":
+				var value := arg.get_slice("=", 1)
+				if not value.is_valid_int() or arg.count("=") != 1:
+					result.error = "--m1-load-slot 需要整数"
+				else:
+					result.load_slot = int(value)
+					if result.load_slot < 0 or result.load_slot > 63:
+						result.error = "--m1-load-slot 只接受 0..63"
 			"--m1-resource":
 				result.resource = arg.trim_prefix("--m1-resource=")
 				if result.resource not in ["fixture", "doom2", "doom", "dss"]:
@@ -154,7 +172,10 @@ func _bootstrap() -> void:
 	print("M1_ENTRY_READY " + JSON.stringify(deployment))
 	if not options.probe:
 		_create_reentry()
-		start_session(options.resource, options.jump)
+		if options.direct:
+			start_session(options.resource, options.jump, options.load_slot)
+		else:
+			show_launcher()
 
 func _create_reentry() -> void:
 	reenter = CanvasLayer.new()
@@ -163,14 +184,77 @@ func _create_reentry() -> void:
 	var button := Button.new()
 	button.text = "进入 ETNDOOM M1（F9）"
 	button.position = Vector2(12, 12)
-	button.pressed.connect(func(): start_session(options.resource, options.jump))
+	button.pressed.connect(show_launcher)
 	reenter.add_child(button)
 	reenter.hide()
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if options.get("enabled", false) and not options.get("probe", false) and ready_ok and screen == null and event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F9:
-		start_session(options.resource, options.jump)
+		show_launcher()
 		get_viewport().set_input_as_handled()
+
+func show_launcher() -> void:
+	if not ready_ok or is_instance_valid(screen):
+		return
+	if is_instance_valid(launcher):
+		launcher.show()
+		return
+	var script = load(PREFIX + "m1/launcher.gd")
+	if script == null or not script.can_instantiate():
+		_fail("launcher_script", "测试启动面板加载失败，ETN 场景保持可用")
+		return
+	launcher_mouse = Input.mouse_mode
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_suspend_host_overlays()
+	launcher_host_scene = get_tree().current_scene
+	if is_instance_valid(launcher_host_scene):
+		launcher_host_process_mode = launcher_host_scene.process_mode
+		launcher_host_scene.process_mode = Node.PROCESS_MODE_DISABLED
+	launcher = CanvasLayer.new()
+	launcher.name = "ETNDOOM_M1_Launcher"
+	launcher.layer = 95
+	add_child(launcher)
+	var panel: Control = script.new()
+	panel.entry = self
+	launcher.add_child(panel)
+	if reenter != null:
+		reenter.hide()
+
+func close_launcher() -> void:
+	if is_instance_valid(launcher):
+		launcher.queue_free()
+		launcher = null
+		Input.mouse_mode = launcher_mouse
+	if is_instance_valid(launcher_host_scene):
+		launcher_host_scene.process_mode = launcher_host_process_mode
+		launcher_host_scene = null
+	if not is_instance_valid(screen):
+		_restore_host_overlays()
+		if reenter != null:
+			reenter.show()
+
+func _suspend_host_overlays() -> void:
+	if not host_overlay_states.is_empty():
+		return
+	# ETN 的性能面板、CRT 和过场是 root 级 autoload；不能跟着游戏画面继续绘制或处理快捷键。
+	for node in get_tree().root.get_children():
+		if node is CanvasLayer:
+			host_overlay_states.append({"node": node, "visible": node.visible, "process_mode": node.process_mode})
+			node.hide()
+			node.process_mode = Node.PROCESS_MODE_DISABLED
+
+func _restore_host_overlays() -> void:
+	for state in host_overlay_states:
+		if is_instance_valid(state.node):
+			state.node.visible = state.visible
+			state.node.process_mode = state.process_mode
+	host_overlay_states.clear()
+
+func launch_test(configuration: Dictionary) -> Dictionary:
+	for field in ["resource", "jump", "skill", "episode", "map", "load_slot"]:
+		if configuration.has(field):
+			options[field] = configuration[field]
+	return start_session(options.resource, options.jump, options.load_slot, bool(configuration.get("fullscreen", true)))
 
 func _clean_old_caches(current_hash: String) -> Dictionary:
 	# 仅删除本模组缓存根下、以完整 SHA-256 命名的旧构建；不进入链接或其它目录。
@@ -204,9 +288,11 @@ func _remove_cache_tree(path: String, allowed_root: String) -> bool:
 			success = false
 	return DirAccess.remove_absolute(path) == OK if success else false
 
-func start_session(resource: String = "fixture", jump: bool = false) -> Dictionary:
+func start_session(resource: String = "fixture", jump: bool = false, load_slot: int = -1, fullscreen: Variant = null) -> Dictionary:
 	if not ready_ok:
 		return {"ok": false, "stage": "entry", "error": "原生入口尚未就绪"}
+	if load_slot < -1 or load_slot > 63:
+		return {"ok": false, "stage": "arguments", "error": "存档槽位超出 0..63 范围"}
 	var screen_script: Script
 	if not options.probe:
 		screen_script = load(PREFIX + "m1/screen.gd")
@@ -219,12 +305,28 @@ func start_session(resource: String = "fixture", jump: bool = false) -> Dictiona
 		if reenter != null:
 			reenter.show()
 		return result
+	if load_slot >= 0:
+		var interactive_result: Dictionary = bridge.input_event(3)
+		if not interactive_result.get("ok", false):
+			bridge.close()
+			_fail("interactive", "不能启用交互存档规则：" + str(interactive_result))
+			return interactive_result
+		var loaded: Dictionary = bridge.request_flow_action("load", load_slot)
+		if not loaded.get("ok", false) or not loaded.get("completed", false):
+			bridge.close()
+			_fail("load", "存档读取失败：" + str(loaded.get("error", loaded)))
+			return loaded
+		result["loaded_slot"] = load_slot
+		result["snapshot"] = bridge.snapshot()
 	if options.probe:
 		return result
+	close_launcher()
 	if reenter != null:
 		reenter.hide()
 	previous_mouse = Input.mouse_mode
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_save_host_window(fullscreen)
+	_suspend_host_overlays()
 	previous_scene = get_tree().current_scene
 	if previous_scene != null:
 		get_tree().root.remove_child(previous_scene)
@@ -242,11 +344,39 @@ func start_session(resource: String = "fixture", jump: bool = false) -> Dictiona
 	print("M1_SESSION_READY " + JSON.stringify({"resource": resource, "snapshot": bridge.snapshot()}))
 	return result
 
+func _save_host_window(fullscreen: Variant) -> void:
+	previous_window = {"mode": DisplayServer.window_get_mode(), "size": DisplayServer.window_get_size(), "position": DisplayServer.window_get_position(), "screen": DisplayServer.window_get_current_screen(), "vsync": DisplayServer.window_get_vsync_mode(), "max_fps": Engine.max_fps, "content_scale_aspect": get_window().content_scale_aspect}
+	# MATCH SCREEN 依据物理窗口比例；保持 canvas_items 缩放并扩展设计视口，避免宿主 KEEP 再套一层黑边。
+	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	if fullscreen == null:
+		return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
+	if not fullscreen and previous_window.mode in [DisplayServer.WINDOW_MODE_FULLSCREEN, DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN]:
+		var usable := DisplayServer.screen_get_usable_rect(int(previous_window.screen))
+		var size := Vector2i(mini(1280, usable.size.x), mini(720, usable.size.y))
+		DisplayServer.window_set_size(size)
+		DisplayServer.window_set_position(usable.position + (usable.size - size) / 2)
+
+func _restore_host_window() -> void:
+	if previous_window.is_empty():
+		return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_current_screen(int(previous_window.screen))
+	DisplayServer.window_set_size(previous_window.size)
+	DisplayServer.window_set_position(previous_window.position)
+	DisplayServer.window_set_mode(int(previous_window.mode))
+	DisplayServer.window_set_vsync_mode(int(previous_window.vsync))
+	Engine.max_fps = int(previous_window.max_fps)
+	get_window().content_scale_aspect = int(previous_window.content_scale_aspect)
+	previous_window.clear()
+
 func stop_session() -> Dictionary:
 	return return_to_etn()
 
 func return_to_etn() -> Dictionary:
 	var result: Dictionary = {"ok": true}
+	var restore_game_state := not previous_window.is_empty()
+	close_launcher()
 	if bridge != null:
 		result = bridge.close()
 	if is_instance_valid(screen):
@@ -256,7 +386,10 @@ func return_to_etn() -> Dictionary:
 		get_tree().root.add_child(previous_scene)
 		get_tree().current_scene = previous_scene
 		previous_scene = null
-	Input.mouse_mode = previous_mouse
+	if restore_game_state:
+		Input.mouse_mode = previous_mouse
+	_restore_host_window()
+	_restore_host_overlays()
 	for state in bgm_states:
 		if is_instance_valid(state.player) and state.player.stream_paused:
 			state.player.stream_paused = state.paused
@@ -266,8 +399,15 @@ func return_to_etn() -> Dictionary:
 	print("M1_RETURNED_TO_ETN")
 	return result
 
+func return_to_launcher() -> Dictionary:
+	var result := return_to_etn()
+	show_launcher()
+	return result
+
 func _exit_tree() -> void:
 	if bridge != null:
 		bridge.close()
 	if is_instance_valid(previous_scene) and not previous_scene.is_inside_tree():
 		previous_scene.free()
+	_restore_host_window()
+	_restore_host_overlays()

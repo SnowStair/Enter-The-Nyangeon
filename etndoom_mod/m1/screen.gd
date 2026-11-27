@@ -4,12 +4,46 @@ const TICS_PER_SECOND := 35.0
 const MAX_TICS_PER_FRAME := 8
 const BACKLOG_WARNING := 70
 const MAX_BACKLOG := 350
+const DOOM_RIGHT := 0xae
+const DOOM_LEFT := 0xac
+const DOOM_UP := 0xad
+const DOOM_DOWN := 0xaf
+const DOOM_ESCAPE := 27
+const DOOM_ENTER := 13
+const DOOM_BACKSPACE := 0x7f
+const DOOM_PAUSE := 0xff
+const DOOM_F1 := 0xbb
+const DOOM_F2 := 0xbc
+const DOOM_F3 := 0xbd
+const DOOM_F4 := 0xbe
+const DOOM_F5 := 0xbf
+const DOOM_F6 := 0xc0
+const DOOM_F7 := 0xc1
+const DOOM_F8 := 0xc2
+const DOOM_F9 := 0xc3
+const DOOM_F10 := 0xc4
+const DOOM_F11 := 0xd7
+const DOOM_F12 := 0xd8
+const DOOM_RSHIFT := 0xb6
+const DOOM_RCTRL := 0x9d
+const DOOM_RALT := 0xb8
+const SMOOTH_PIXEL_SHADER := """
+shader_type canvas_item;
+render_mode unshaded;
+uniform vec2 integer_scale = vec2(1.0);
+void fragment() {
+    // 等价于 Crispy 的 nearest 整数上采样，再以 linear 缩放到窗口。
+    vec2 source = UV / TEXTURE_PIXEL_SIZE - vec2(0.5);
+    vec2 blend = clamp((fract(source) - vec2(0.5)) * integer_scale + vec2(0.5), vec2(0.0), vec2(1.0));
+    vec2 sample_uv = (floor(source) + blend + vec2(0.5)) * TEXTURE_PIXEL_SIZE;
+    COLOR = texture(TEXTURE, sample_uv);
+}
+"""
+
 var entry: Node
 var bridge: RefCounted
 var texture: ImageTexture
 var picture: TextureRect
-var status: Label
-var paused_button: Button
 var previous_usec := 0
 var accumulator := 0.0
 var backlog := 0
@@ -20,13 +54,16 @@ var frame_count := 0
 var executed_tics := 0
 var test_input: Dictionary = {}
 var overload := false
-var slot: SpinBox
-var notice: Label
+var slot := 0
 var last_event_seq := 0
-var new_game_dialog: ConfirmationDialog
-var skill_select: OptionButton
-var episode_select: SpinBox
-var map_select: SpinBox
+var interactive := true
+var native_ui: Dictionary = {}
+var _applied_window_settings: Dictionary = {}
+var _display_size := Vector2i.ZERO
+var error_dialog: AcceptDialog
+var _smooth_material: ShaderMaterial
+var _use_alias_down := false
+var _space_down := false
 
 func _ready() -> void:
 	name = "ETNDOOM_M1"
@@ -37,98 +74,128 @@ func _ready() -> void:
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
-	var column := VBoxContainer.new()
-	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(column)
-	column.add_theme_constant_override("separation", 2)
-	var tools := HBoxContainer.new()
-	column.add_child(tools)
-	var back := Button.new()
-	back.text = "返回 ETN（F10）"
-	back.pressed.connect(_return)
-	tools.add_child(back)
-	paused_button = Button.new()
-	paused_button.text = "暂停（Esc）"
-	paused_button.pressed.connect(_toggle_pause)
-	tools.add_child(paused_button)
-	var restart := Button.new()
-	restart.text = "重开本图（F5）"
-	restart.pressed.connect(_restart)
-	tools.add_child(restart)
-	var more := HBoxContainer.new()
-	column.add_child(more)
-	for spec in [["新游戏", _new_game], ["重生/确认（Enter）", _confirm], ["保存（F6）", _save], ["读取（F7）", _load]]:
-		var button := Button.new()
-		button.text = spec[0]
-		button.add_theme_font_size_override("font_size", 12)
-		button.pressed.connect(spec[1])
-		more.add_child(button)
-	slot = SpinBox.new()
-	slot.min_value = 1
-	slot.max_value = 8
-	slot.value = 1
-	slot.prefix = "槽"
-	slot.custom_minimum_size.x = 66
-	more.add_child(slot)
-	for button in tools.get_children():
-		button.add_theme_font_size_override("font_size", 12)
-		button.focus_mode = Control.FOCUS_NONE
-	for button in more.get_children():
-		if button is Button:
-			button.focus_mode = Control.FOCUS_NONE
 	picture = TextureRect.new()
+	picture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	picture.stretch_mode = TextureRect.STRETCH_SCALE
 	picture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	picture.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(picture)
-	status = Label.new()
-	status.add_theme_font_size_override("font_size", 12)
-	column.add_child(status)
-	notice = Label.new()
-	notice.add_theme_font_size_override("font_size", 12)
-	notice.text = "M1 · " + entry.options.resource
-	column.add_child(notice)
-	var hint := Label.new()
-	hint.text = "WASD 移动 · ←/→ 转向 · Ctrl/画面左键 开火 · E 使用 · 1–7 武器 · Space 跳跃"
-	hint.add_theme_font_size_override("font_size", 12)
-	column.add_child(hint)
+	add_child(picture)
+	var shader := Shader.new()
+	shader.code = SMOOTH_PIXEL_SHADER
+	_smooth_material = ShaderMaterial.new()
+	_smooth_material.shader = shader
 	previous_usec = Time.get_ticks_usec()
+	_apply_native_window_settings()
+	_sync_native_ui()
 	_draw_frame()
-	_build_new_game_dialog()
+
+func _process(_delta: float) -> void:
+	var now := Time.get_ticks_usec()
+	var seconds := float(now - previous_usec) / 1000000.0
+	previous_usec = now
+	advance_seconds(seconds)
 
 func _input(event: InputEvent) -> void:
-	if new_game_dialog != null and new_game_dialog.visible:
+	if return_requested or bridge == null or not bridge.running:
+		return
+	if is_instance_valid(error_dialog) and error_dialog.visible:
 		return
 	if event is InputEventKey:
-		if get_viewport().gui_get_focus_owner() is LineEdit and event.physical_keycode not in [KEY_ESCAPE, KEY_F10]:
-			return
-		if event.echo:
+		if event.echo and not native_ui.get("menu_active", false):
 			get_viewport().set_input_as_handled()
 			return
-		var key: int = event.physical_keycode
-		held[key] = event.pressed
-		if event.pressed:
-			if key == KEY_ESCAPE:
-				_toggle_pause()
-			elif key == KEY_F10:
-				_return()
-			elif key == KEY_F5:
-				_restart()
-			elif key == KEY_F6:
-				_save()
-			elif key == KEY_F7:
-				_load()
-			elif key == KEY_ENTER or key == KEY_KP_ENTER:
-				_confirm()
-			elif key >= KEY_1 and key <= KEY_7:
-				requested_weapon = key - KEY_1
+		var doom_key := _doom_key(event)
+		if doom_key >= 0:
+			interactive = true
+			var gameplay_input: bool = not bridge.paused and not native_ui.get("menu_active", false) and not native_ui.get("native_paused", false)
+			if event.physical_keycode == KEY_SPACE:
+				_space_down = event.pressed
+			# E 和 Space 同时按住时，任一个松开都不能提前释放使用键。
+			if event.physical_keycode != KEY_SPACE or event.pressed or not _use_alias_down:
+				_send_input(1 if event.pressed else 0, doom_key, event.unicode if event.unicode < 128 else 0, event.unicode if event.unicode < 128 else 0)
+			_sync_native_ui()
+			# 保留原始 E 给原生菜单/秘籍；仅游玩时额外按下默认使用键。
+			if event.physical_keycode == KEY_E:
+				if event.pressed and gameplay_input and not native_ui.get("menu_active", false):
+					_use_alias_down = true
+					if not _space_down:
+						_send_input(1, 32, 32, 32)
+				elif not event.pressed and _use_alias_down:
+					_use_alias_down = false
+					if not _space_down:
+						_send_input(0, 32, 0, 0)
+			if not event.pressed and event.physical_keycode == KEY_ESCAPE and native_ui.get("menu_active", false) == false:
+				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion:
+		interactive = true
+		_send_input(2, int(event.button_mask) & 7, clampi(int(round(event.screen_relative.x)), -32768, 32767), clampi(-int(round(event.screen_relative.y)), -32768, 32767))
+		_sync_native_ui()
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		held["fire"] = event.pressed and picture.get_global_rect().has_point(event.position)
-		if held["fire"] and get_viewport().gui_get_focus_owner() != null:
-			get_viewport().gui_get_focus_owner().release_focus()
+	elif event is InputEventMouseButton:
+		if event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			interactive = true
+			_send_input(2, int(event.button_mask), 0, 0)
+			if event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+				_send_input(2, int(event.button_mask) & 7, 0, 0)
+			_sync_native_ui()
+			get_viewport().set_input_as_handled()
+
+func _doom_key(event: InputEventKey) -> int:
+	var key := int(event.physical_keycode)
+	match key:
+		KEY_ESCAPE: return DOOM_ESCAPE
+		KEY_ENTER, KEY_KP_ENTER: return DOOM_ENTER
+		KEY_BACKSPACE: return DOOM_BACKSPACE
+		KEY_TAB: return 9
+		KEY_PAUSE: return DOOM_PAUSE
+		KEY_UP: return DOOM_UP
+		KEY_DOWN: return DOOM_DOWN
+		KEY_LEFT: return DOOM_LEFT
+		KEY_RIGHT: return DOOM_RIGHT
+		KEY_F1: return DOOM_F1
+		KEY_F2: return DOOM_F2
+		KEY_F3: return DOOM_F3
+		KEY_F4: return DOOM_F4
+		KEY_F5: return DOOM_F5
+		KEY_F6: return DOOM_F6
+		KEY_F7: return DOOM_F7
+		KEY_F8: return DOOM_F8
+		KEY_F9: return DOOM_F9
+		KEY_F10: return DOOM_F10
+		KEY_F11: return DOOM_F11
+		KEY_F12: return DOOM_F12
+		KEY_SHIFT: return DOOM_RSHIFT
+		KEY_CTRL: return DOOM_RCTRL
+		KEY_ALT: return DOOM_RALT
+		KEY_DELETE: return 0xd3
+		KEY_HOME: return 0xc7
+		KEY_END: return 0xcf
+		KEY_PAGEUP: return 0xc9
+		KEY_PAGEDOWN: return 0xd1
+		KEY_INSERT: return 0xd2
+		KEY_CAPSLOCK: return 0xba
+		KEY_NUMLOCK: return 0xc5
+		KEY_SCROLLLOCK: return 0xc6
+		KEY_KP_ADD: return 43
+		KEY_KP_SUBTRACT: return 45
+		KEY_KP_MULTIPLY: return 42
+		KEY_KP_DIVIDE: return 47
+		KEY_EQUAL: return 0x3d
+		KEY_MINUS: return 0x2d
+		KEY_SPACE: return 32
+		_:
+			if key >= KEY_A and key <= KEY_Z:
+				return key + 32
+			if key >= 32 and key <= 126:
+				return key
+	return -1
+
+func _send_input(kind: int, a: int, b: int, c: int) -> void:
+	var result: Dictionary = bridge.input_event(kind, a, b, c)
+	if not result.get("ok", false):
+		_show_error("Crispy Doom 输入失败：%s" % result)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and bridge != null and bridge.running:
@@ -136,14 +203,20 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN and bridge != null and bridge.running:
 		_set_pause(false, "focus")
 
+func _process_legacy_tick() -> Dictionary:
+	var speed := 50 if _held(KEY_SHIFT) else 25
+	var buttons := 1 if _held(KEY_CTRL) else 0
+	if _held(KEY_E):
+		buttons |= 2
+	if requested_weapon >= 0:
+		buttons |= 4 | (requested_weapon << 3)
+		requested_weapon = -1
+	var cmd := {"forward_move": (_held(KEY_W) - _held(KEY_S)) * speed, "side_move": (_held(KEY_D) - _held(KEY_A)) * speed, "angle_turn": (_held(KEY_LEFT) - _held(KEY_RIGHT)) * 640, "buttons": buttons, "arti": 128 if entry.options.jump and _held(KEY_SPACE) else 0}
+	cmd.merge(test_input, true)
+	return bridge.command(cmd, false)
+
 func _held(key) -> int:
 	return 1 if held.get(key, false) else 0
-
-func _process(_delta: float) -> void:
-	var now := Time.get_ticks_usec()
-	var seconds := float(now - previous_usec) / 1000000.0
-	previous_usec = now
-	advance_seconds(seconds)
 
 func advance_seconds(seconds: float) -> Dictionary:
 	if return_requested or not bridge.running:
@@ -164,20 +237,14 @@ func advance_seconds(seconds: float) -> Dictionary:
 		overload = true
 		bridge.set_paused(true, "overload")
 		held.clear()
-		status.text = "模拟积压 %d tic 超过 %d；欠账已保留，请重新开始或返回 ETN。" % [backlog, MAX_BACKLOG]
+		_show_error("模拟积压 %d tic；请返回测试入口后重新开始。" % backlog)
 		return {"ok": false, "error": "backlog_overflow", "backlog": backlog}
 	var count := mini(int(accumulator + 0.000000001), MAX_TICS_PER_FRAME)
-	for i in count:
-		var speed := 50 if _held(KEY_SHIFT) else 25
-		var buttons := 1 if _held(KEY_CTRL) or _held("fire") else 0
-		if _held(KEY_E):
-			buttons |= 2
-		if requested_weapon >= 0:
-			buttons |= 4 | (requested_weapon << 3)
-			requested_weapon = -1
-		var cmd := {"forward_move": (_held(KEY_W) - _held(KEY_S)) * speed, "side_move": (_held(KEY_D) - _held(KEY_A)) * speed, "angle_turn": (_held(KEY_LEFT) - _held(KEY_RIGHT)) * 640, "buttons": buttons, "arti": 128 if entry.options.jump and _held(KEY_SPACE) else 0}
-		cmd.merge(test_input, true)
-		var result: Dictionary = bridge.command(cmd, false)
+	var executed := 0
+	if interactive and test_input.is_empty():
+		_sync_display_size()
+	for _i in count:
+		var result: Dictionary = bridge.play_tick() if interactive and test_input.is_empty() else _process_legacy_tick()
 		if not result.get("ok", false):
 			if bridge.running:
 				_set_pause(true)
@@ -185,56 +252,106 @@ func advance_seconds(seconds: float) -> Dictionary:
 				held.clear()
 				requested_weapon = -1
 				accumulator = 0.0
-			status.text = "运行错误：" + str(result)
+			_show_error("Crispy Doom 运行失败：%s" % result)
 			return result
 		accumulator -= 1.0
-		executed_tics += 1
+		executed += int(result.get("executed", 0))
+		executed_tics += int(result.get("executed", 0))
 		if not _consume_events():
 			return {"ok": false, "error": "事件消费失败"}
 	backlog = int(accumulator)
-	if not _consume_events():
-		return {"ok": false, "error": "事件消费失败"}
-	if count > 0:
-		_draw_frame()
+	_sync_native_ui()
+	if bridge.interactive and native_ui.get("uncapped", false):
+		bridge.input_event(5, int(clampf(accumulator, 0.0, 1.0) * 65536.0))
+	_draw_frame()
 	frame_count += 1
-	status.text = "Crispy Doom 7.2 · tic %d · 待补 %d%s · %s" % [bridge.next_tic, backlog, "（性能不足，保留全部欠账）" if backlog >= BACKLOG_WARNING else "", "原生跳跃开启" if entry.options.jump else "原规则配置"]
-	return {"ok": true, "executed": count, "backlog": backlog, "accumulator": accumulator}
+	return {"ok": true, "executed": executed, "backlog": backlog, "accumulator": accumulator}
+
+func _sync_native_ui() -> void:
+	if bridge == null or not bridge.running:
+		return
+	native_ui = bridge.ui_status()
+	if native_ui.get("quit_requested", false):
+		return_requested = true
+		entry.return_to_launcher.call_deferred()
+		return
+	if bridge.paused or native_ui.get("menu_active", false) or native_ui.get("native_paused", false) or (is_instance_valid(error_dialog) and error_dialog.visible):
+		_use_alias_down = false
+		_space_down = false
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_apply_native_window_settings()
+
+func _apply_native_window_settings() -> void:
+	if native_ui.is_empty():
+		return
+	var window := get_window()
+	if window == null:
+		return
+	var vsync := int(native_ui.get("vsync", 0))
+	var fps := int(native_ui.get("fps_limit", 0)) if native_ui.get("uncapped", false) else 35
+	var settings := {"vsync": vsync, "fps": fps}
+	if settings != _applied_window_settings:
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync != 0 else DisplayServer.VSYNC_DISABLED)
+		Engine.max_fps = fps
+		_applied_window_settings = settings
+	var smooth := bool(native_ui.get("smooth_scaling", false))
+	picture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR if smooth else CanvasItem.TEXTURE_FILTER_NEAREST
+	picture.material = _smooth_material if smooth else null
+
+func _sync_display_size() -> void:
+	var display := DisplayServer.window_get_size()
+	if display != _display_size and display.x > 0 and display.y > 0:
+		bridge.input_event(4, display.x, display.y)
+		_display_size = display
 
 func _draw_frame() -> void:
-	var size: Dictionary = bridge.dimensions()
-	var bytes: PackedByteArray = bridge.framebuffer()
-	if bytes.size() != int(size.get("width", 0)) * int(size.get("height", 0)) * 4:
-		status.text = "帧缓冲读取失败"
+	if bridge == null or not bridge.running:
 		return
-	var image := Image.create_from_data(int(size.width), int(size.height), false, Image.FORMAT_RGBA8, bytes)
-	if texture == null:
+	var size: Dictionary = bridge.dimensions()
+	var width := int(size.get("width", 0))
+	var height := int(size.get("height", 0))
+	var bytes: PackedByteArray = bridge.framebuffer()
+	if width <= 0 or height <= 0 or bytes.size() != width * height * 4:
+		push_error("Crispy Doom 帧缓冲读取失败")
+		return
+	var image := Image.create_from_data(width, height, false, Image.FORMAT_RGBA8, bytes)
+	if texture == null or texture.get_width() != width or texture.get_height() != height:
 		texture = ImageTexture.create_from_image(image)
 		picture.texture = texture
 	else:
 		texture.update(image)
+	var target_aspect := float(width) / (float(height) * (1.2 if native_ui.get("aspect_ratio_correct", true) else 1.0))
+	var frame_size := self.size
+	if frame_size.x / maxf(frame_size.y, 1.0) > target_aspect:
+		frame_size.x = frame_size.y * target_aspect
+	else:
+		frame_size.y = frame_size.x / target_aspect
+	picture.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	picture.position = (self.size - frame_size) * 0.5
+	picture.size = frame_size
+	var output_size := frame_size * Vector2(DisplayServer.window_get_size()) / self.size.max(Vector2.ONE)
+	var integer_scale := Vector2(maxf(1.0, ceilf(floorf(output_size.x + 0.001) / float(width))), maxf(1.0, ceilf(floorf(output_size.y + 0.001) / float(height))))
+	_smooth_material.set_shader_parameter("integer_scale", integer_scale)
 
 func _consume_events() -> bool:
 	var result: Dictionary = bridge.read_events(last_event_seq)
 	if not result.get("ok", false):
-		status.text = "事件读取失败：" + str(result.get("error", result))
+		push_error("M1 事件读取失败：%s" % result.get("error", result))
 		if bridge.running:
 			bridge.close()
 		return false
 	for item in result.events:
-		# 原生后端已消费音频；界面消费流程/请求结果，快照用于重建全部表现。
 		if item.type == "world_changed":
 			held.clear()
 			requested_weapon = -1
-		elif item.type == "request_failed":
-			notice.text = "操作失败：" + str(item.payload.get("error", item.payload))
-		elif item.type == "request_completed":
-			notice.text = "操作已完成：" + str(item.payload.get("operation", item.payload.get("request_id", "")))
-		elif item.type == "request_cancelled":
-			notice.text = "待处理操作已取消：" + str(item.payload.get("request_id", ""))
+		elif item.type in ["request_failed", "request_cancelled"]:
+			push_warning("M1 请求未完成：%s" % item.payload)
 		last_event_seq = int(item.event_seq)
 	var acknowledged: Dictionary = bridge.acknowledge_events(last_event_seq)
 	if not acknowledged.get("ok", false):
-		status.text = "事件确认失败：" + str(acknowledged)
+		push_error("M1 事件确认失败：%s" % acknowledged)
 		bridge.close()
 		return false
 	return true
@@ -246,17 +363,24 @@ func _set_pause(value: bool, reason: String = "manual") -> void:
 		return
 	var response: Dictionary = bridge.set_paused(value, reason)
 	if not response.get("ok", false):
-		status.text = "暂停变更失败：" + str(response)
+		push_error("暂停变更失败：%s" % response)
 		return
 	accumulator = 0.0
 	backlog = 0
 	held.clear()
 	requested_weapon = -1
+	if bridge.interactive:
+		bridge.input_event(3)
 	previous_usec = Time.get_ticks_usec()
-	paused_button.text = "继续（Esc）" if bridge.paused else "暂停（Esc）"
+	_sync_native_ui()
 
 func _toggle_pause() -> void:
-	_set_pause(not bridge.pause_reasons.has("manual"))
+	if interactive:
+		bridge.input_event(1, DOOM_ESCAPE, DOOM_ESCAPE, DOOM_ESCAPE)
+		_sync_native_ui()
+		_draw_frame()
+	else:
+		_set_pause(not bridge.pause_reasons.has("manual"))
 
 func _restart() -> void:
 	_control("restart_level")
@@ -269,20 +393,20 @@ func _confirm() -> void:
 		_control("confirm")
 
 func _save() -> void:
-	_control("save", int(slot.value) - 1)
+	_control("save", slot)
 
 func _load() -> void:
-	_control("load", int(slot.value) - 1)
+	_control("load", slot)
 
 func _control(action: String, a: int = 0, b: int = 0, c: int = 0) -> void:
 	var response: Dictionary = bridge.request_flow_action(action, a, b, c)
-	notice.text = (("已完成：" if response.get("completed", false) else "已接受：") if response.get("ok", false) else "操作失败：") + action + ("" if response.get("ok", false) else " · " + str(response.get("error", response)))
-	if response.get("ok", false):
-		if action in ["new_game", "restart_level", "reborn", "load"]:
-			overload = false
-			accumulator = 0.0
-			backlog = 0
-			bridge.set_paused(false, "overload")
+	if not response.get("ok", false):
+		push_warning("Crispy Doom 操作失败：%s" % response)
+	if response.get("ok", false) and action in ["new_game", "restart_level", "reborn", "load"]:
+		overload = false
+		accumulator = 0.0
+		backlog = 0
+		bridge.set_paused(false, "overload")
 		held.clear()
 		requested_weapon = -1
 		previous_usec = Time.get_ticks_usec()
@@ -290,40 +414,21 @@ func _control(action: String, a: int = 0, b: int = 0, c: int = 0) -> void:
 			_draw_frame()
 	_consume_events()
 
-func _build_new_game_dialog() -> void:
-	new_game_dialog = ConfirmationDialog.new()
-	new_game_dialog.title = "新游戏 · " + entry.options.resource
-	new_game_dialog.ok_button_text = "开始"
-	new_game_dialog.cancel_button_text = "取消"
-	add_child(new_game_dialog)
-	var form := VBoxContainer.new()
-	new_game_dialog.add_child(form)
-	skill_select = OptionButton.new()
-	for value in ["1 · I'm too young to die", "2 · Hey, not too rough", "3 · Hurt me plenty", "4 · Ultra-Violence", "5 · Nightmare"]:
-		skill_select.add_item(value)
-	skill_select.select(entry.options.skill - 1)
-	form.add_child(skill_select)
-	episode_select = SpinBox.new()
-	episode_select.prefix = "Episode"
-	episode_select.min_value = 1
-	episode_select.max_value = 4 if entry.options.resource in ["doom", "dss"] else 1
-	episode_select.value = entry.options.episode
-	form.add_child(episode_select)
-	map_select = SpinBox.new()
-	map_select.prefix = "Map"
-	map_select.min_value = 1
-	map_select.max_value = 9 if entry.options.resource in ["doom", "dss"] else (1 if entry.options.resource == "fixture" else 32)
-	map_select.value = entry.options.map
-	form.add_child(map_select)
-	new_game_dialog.confirmed.connect(func():
-		_control("new_game", skill_select.selected + 1, int(episode_select.value), int(map_select.value))
-		_set_pause(false, "dialog"))
-	new_game_dialog.canceled.connect(func(): _set_pause(false, "dialog"))
-
 func _new_game() -> void:
-	_set_pause(true, "dialog")
-	if bridge.running and bridge.pause_reasons.has("dialog"):
-		new_game_dialog.popup_centered(Vector2i(340, 180))
+	_toggle_pause()
+
+func _show_error(message: String) -> void:
+	push_error(message)
+	if not is_instance_valid(error_dialog):
+		error_dialog = AcceptDialog.new()
+		error_dialog.title = "Crispy Doom"
+		error_dialog.ok_button_text = "返回测试入口"
+		error_dialog.confirmed.connect(func(): entry.return_to_launcher())
+		error_dialog.canceled.connect(func(): entry.return_to_launcher())
+		add_child(error_dialog)
+	error_dialog.dialog_text = message
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	error_dialog.popup_centered(Vector2i(520, 180))
 
 func _return() -> void:
 	return_requested = true

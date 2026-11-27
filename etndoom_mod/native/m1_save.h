@@ -3,5 +3,8 @@
 #define ETN_M1_SAVE_H
 int m1_save_identity(const char *iwad, const char *pwad, int jump);
 int m1_save_slot(int slot, char *error, unsigned capacity);
+int m1_save_slot_named(int slot, const char *description, char *error, unsigned capacity);
 int m1_load_slot(int slot, char *error, unsigned capacity);
+const char *m1_save_path(int slot);
+int m1_save_description(int slot, char *description, int capacity);
 #endif

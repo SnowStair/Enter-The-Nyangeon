@@ -36,6 +36,44 @@ var _native_event_seq := 0
 var _native_ack_map: Dictionary = {}
 var _resource_lengths: Dictionary = {}
 var _pending_requests: Dictionary = {}
+var interactive := false
+
+func save_directory(resource: String, jump: bool) -> String:
+	return ProjectSettings.globalize_path("user://etndoom_m1/saves/" + resource + ("_jump" if jump else "_original"))
+
+# 浏览只读取封套头，真正加载仍由原生校验完整摘要与补充状态。
+func save_slots(resource: String, jump: bool) -> Array[Dictionary]:
+	var slots: Array[Dictionary] = []
+	if resource not in ["fixture", "doom2", "doom", "dss"]:
+		return slots
+	var iwad := DOOM if resource in ["doom", "dss"] else IWAD
+	var pwad := PWAD if resource == "fixture" else (DSS if resource == "dss" else "")
+	var identity := FileAccess.get_sha256(iwad) + (FileAccess.get_sha256(pwad) if not pwad.is_empty() else "0".repeat(64))
+	var core_identity := FileAccess.get_sha256(core_path)
+	for number in 64:
+		var path := save_directory(resource, jump).path_join("m1-slot-%d.etns" % number)
+		var item := {"slot": number, "file": path, "exists": FileAccess.file_exists(path), "description": "空存档", "episode": 0, "map": 0, "skill": 0, "modified": 0, "compatible": false, "error": ""}
+		if item.exists:
+			item.modified = FileAccess.get_modified_time(path)
+			var file := FileAccess.open(path, FileAccess.READ)
+			if file == null:
+				item.error = "不能读取存档"
+			else:
+				var header := file.get_buffer(168)
+				if header.size() != 168 or header.slice(0, 7).get_string_from_ascii() != "ETNM1SV" or header.decode_u32(8) != 1 or header.decode_u32(12) != 168 or int(file.get_length()) != 168 + header.decode_u32(16) + header.decode_u32(20):
+					item.error = "存档封套无效"
+				else:
+					item.description = file.get_buffer(24).get_string_from_utf8().strip_edges()
+					item.skill = header.decode_s32(156) + 1
+					item.episode = header.decode_s32(160)
+					item.map = header.decode_s32(164)
+					item.rules = header.decode_s32(152)
+					item.compatible = header.slice(24, 88).hex_encode() == identity and header.slice(88, 120).hex_encode() == core_identity
+					if not item.compatible:
+						item.error = "构建或资源身份不同；请使用原启动器"
+				file.close()
+		slots.append(item)
+	return slots
 
 func setup(path: String) -> void:
 	core_path = path
@@ -74,7 +112,7 @@ func create_session(resource: String = "fixture", jump: bool = false, skill: int
 		return _error("resource", "自制夹具仅允许 MAP01")
 	if resource in ["doom", "dss"] and (episode < 1 or episode > 4 or map < 1 or map > 9):
 		return _error("resource", "Doom 起始关卡范围为 E1–E4 / M1–M9")
-	var save_dir := ProjectSettings.globalize_path("user://etndoom_m1/saves/" + resource + ("_jump" if jump else "_original"))
+	var save_dir := save_directory(resource, jump)
 	DirAccess.make_dir_recursive_absolute(save_dir)
 	var pwad := PWAD if resource == "fixture" else (DSS if resource == "dss" else "")
 	var iwad := DOOM if resource in ["doom", "dss"] else IWAD
@@ -113,6 +151,7 @@ func create_session(resource: String = "fixture", jump: bool = false, skill: int
 	_native_ack_map.clear()
 	_resource_lengths.clear()
 	_pending_requests.clear()
+	interactive = false
 	_event("session_started", {"resource": resource, "jump": jump})
 	return {"ok": true, "session_epoch": session_epoch, "world_epoch": world_epoch, "snapshot": snapshot()}
 
@@ -214,6 +253,45 @@ func command(values: Dictionary = {}, capture_snapshot: bool = true) -> Dictiona
 	cmd.merge(values, true)
 	var accepted := submit_commands([cmd])
 	return step(1, capture_snapshot) if accepted.get("ok", false) else accepted
+
+func ui_status() -> Dictionary:
+	return _decode(native.call("ui_status_json")) if running else _error("state", "无活动会话")
+
+func input_event(kind: int, a: int = 0, b: int = 0, c: int = 0) -> Dictionary:
+	if not running or failed:
+		return _error("state", "会话不可接受输入")
+	if paused and kind != 3:
+		return {"ok": true, "ignored": true}
+	var result := _decode(native.call("input_json", kind, a, b, c))
+	if not result.get("ok", true):
+		return result
+	interactive = true
+	_check_world(_decode(native.call("status_json")))
+	_collect_native_events()
+	return _stop_failed_session(last_error) if failed else result
+
+func play_tick() -> Dictionary:
+	if not running or failed:
+		return _error("state", "会话不可步进")
+	if paused:
+		return {"ok": true, "executed": 0, "paused": true}
+	if not queue.is_empty():
+		return _error("command_pending", "交互输入前须消费显式命令队列")
+	if events.size() >= EVENT_CAPACITY - 4:
+		return _error("event_capacity", "请先消费待处理事件")
+	var state := _decode(native.call("play_tick_json"))
+	if not state.get("ok", true):
+		return _stop_failed_session(state)
+	interactive = true
+	var ui := ui_status()
+	var executed := int(ui.get("executed", 1))
+	next_tic += executed
+	snapshot_seq += 1
+	_check_world(state)
+	_collect_native_events()
+	if failed:
+		return _stop_failed_session(last_error)
+	return {"ok": true, "executed": executed, "next_tic": next_tic, "status": _decorate(state), "ui": ui}
 
 func _check_world(state: Dictionary) -> bool:
 	var identity := str(state.get("world_epoch", ""))

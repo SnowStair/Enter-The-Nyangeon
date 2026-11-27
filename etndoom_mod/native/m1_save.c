@@ -21,6 +21,8 @@
 #include "m0_core.h"
 #include "m0_memory.h"
 #include "m1_save.h"
+#include "crispy.h"
+#include "m1_interactive.h"
 extern int rndindex,prndindex,crndindex,demostarttic,oldleveltime;
 extern int numtextures;
 extern int m1_brain_easy;
@@ -162,7 +164,7 @@ static void restore(uint8_t *buffer,size_t length){
     free(loaded);free(ordered);
 }
 static int paths(int slot,char *path,char *temporary,char *raw){
-    if(slot<0||slot>7)return 0;
+    if(slot<0||slot>63)return 0;
     snprintf(path,4096,"%sm1-slot-%d.etns",m0_config_dir(),slot);
     snprintf(temporary,4096,"%sm1-slot-%d.tmp",m0_config_dir(),slot);
     snprintf(raw,4096,"%sm1-transaction.dsg",m0_config_dir());return 1;
@@ -196,16 +198,28 @@ static int preflight(uint8_t *buffer,size_t size){
 #undef REF
     return 1;
 }
-int m1_save_slot(int slot,char *error,unsigned cap){
+const char *m1_save_path(int slot){static char path[4096];snprintf(path,sizeof(path),"%sm1-slot-%d.etns",m0_config_dir(),slot);return path;}
+int m1_save_description(int slot,char *description,int capacity){
+    envelope_t h;FILE *f;int ok=0;
+    if(slot<0||slot>63||capacity<1)return 0;
+    f=M_fopen(m1_save_path(slot),"rb");if(!f)return 0;
+    if(fread(&h,1,sizeof(h),f)==sizeof(h)&&!memcmp(h.magic,"ETNM1SV",8)&&h.schema==1&&h.header_size==sizeof(h)){
+        int count=capacity<SAVESTRINGSIZE?capacity:SAVESTRINGSIZE;
+        ok=fread(description,1,count,f)==(size_t)count;description[count-1]=0;
+    }
+    fclose(f);return ok;
+}
+int m1_save_slot(int slot,char *error,unsigned cap){return m1_save_slot_named(slot,"ETNDOOM M1",error,cap);}
+int m1_save_slot_named(int slot,const char *description,char *error,unsigned cap){
     char path[4096],temporary[4096],raw[4096];uint8_t *supp=NULL,*payload=NULL,*whole=NULL;size_t sn,pn;envelope_t h;FILE *f;int ok=0;
     if(!paths(slot,path,temporary,raw)){snprintf(error,cap,"INVALID_SLOT");return -1;}
     if(gamestate!=GS_LEVEL||gameaction!=ga_nothing||!players[consoleplayer].mo||players[consoleplayer].playerstate!=PST_LIVE||players[consoleplayer].health<=0){snprintf(error,cap,"SAVE_STATE_NOT_ALLOWED");return -1;}
     supp=capture(&sn,error,cap);if(!supp)return -1;
     save_stream=M_fopen(raw,"wb");if(!save_stream){snprintf(error,cap,"SAVE_WRITE_FAILED");goto end;}
-    savegame_error=false;P_WriteSaveGameHeader("ETNDOOM M1");P_ArchivePlayers();P_ArchiveWorld();P_ArchiveThinkers();P_ArchiveSpecials();P_WriteSaveGameEOF();P_WriteExtendedSaveGameData();
+    savegame_error=false;P_WriteSaveGameHeader((char *)(description?description:"ETNDOOM M1"));P_ArchivePlayers();P_ArchiveWorld();P_ArchiveThinkers();P_ArchiveSpecials();P_WriteSaveGameEOF();P_WriteExtendedSaveGameData();
     ok=!ferror(save_stream);if(fclose(save_stream))ok=0;save_stream=NULL;if(!ok){snprintf(error,cap,"SAVE_WRITE_FAILED");goto end;}
     payload=read_file(raw,&pn);if(!payload||pn+sn+sizeof(h)>SAVE_MAX){snprintf(error,cap,"SAVE_CAPACITY");ok=0;goto end;}
-    memset(&h,0,sizeof(h));memcpy(h.magic,"ETNM1SV",8);h.schema=1;h.header_size=sizeof(h);h.payload_size=pn;h.supplement_size=sn;memcpy(h.resource,resource_identity,64);memcpy(h.core,core_identity,32);h.jump=rules_jump;h.skill=gameskill;h.episode=gameepisode;h.map=gamemap;
+    memset(&h,0,sizeof(h));memcpy(h.magic,"ETNM1SV",8);h.schema=1;h.header_size=sizeof(h);h.payload_size=pn;h.supplement_size=sn;memcpy(h.resource,resource_identity,64);memcpy(h.core,core_identity,32);h.jump=m1_interactive_enabled()?(crispy->jump|(crispy->freeaim<<2)|(!!crispy->overunder<<4)):rules_jump;h.skill=gameskill;h.episode=gameepisode;h.map=gamemap;
     whole=malloc(sizeof(h)+pn+sn);if(!whole){snprintf(error,cap,"SAVE_ALLOC_FAILED");ok=0;goto end;}memcpy(whole,&h,sizeof(h));memcpy(whole+sizeof(h),payload,pn);memcpy(whole+sizeof(h)+pn,supp,sn);if(!sha(whole,sizeof(h)+pn+sn,h.digest)){snprintf(error,cap,"SAVE_HASH_FAILED");ok=0;goto end;}memcpy(whole,&h,sizeof(h));
     f=M_fopen(temporary,"wb");if(!f){snprintf(error,cap,"SAVE_WRITE_FAILED");ok=0;goto end;}
     ok=fwrite(whole,1,sizeof(h)+pn+sn,f)==sizeof(h)+pn+sn;if(fflush(f)||ferror(f))ok=0;if(fclose(f))ok=0;
@@ -221,7 +235,8 @@ int m1_load_slot(int slot,char *error,unsigned cap){
     memcpy(&h,whole,sizeof(h));
     if(memcmp(h.magic,"ETNM1SV",8)||h.schema!=1||h.header_size!=sizeof(h)||h.payload_size<64||h.supplement_size<sizeof(supplement_t)||(uint64_t)sizeof(h)+h.payload_size+h.supplement_size!=n){snprintf(error,cap,"SAVE_CONTAINER_INVALID");goto reject;}
     memset(((envelope_t*)whole)->digest,0,32);if(!sha(whole,n,digest)||memcmp(digest,h.digest,32)){snprintf(error,cap,"SAVE_HASH_MISMATCH");goto reject;}
-    if(memcmp(h.resource,resource_identity,64)||memcmp(h.core,core_identity,32)||h.jump!=rules_jump){snprintf(error,cap,"SAVE_IDENTITY_MISMATCH");goto reject;}
+    if(memcmp(h.resource,resource_identity,64)||memcmp(h.core,core_identity,32)||(!m1_interactive_enabled()&&h.jump!=rules_jump)){snprintf(error,cap,"SAVE_IDENTITY_MISMATCH");goto reject;}
+    if(h.jump<0||h.jump>26||(h.jump&3)>2||((h.jump>>2)&3)>2){snprintf(error,cap,"SAVE_RULES_INVALID");goto reject;}
     if(h.skill<0||h.skill>4||h.episode<1||h.episode>4||h.map<1||h.map>32||!preflight(whole+sizeof(h)+h.payload_size,h.supplement_size)){snprintf(error,cap,"SAVE_SUPPLEMENT_INVALID");goto reject;}
     memset(version,0,sizeof(version));snprintf(version,sizeof(version),"version %i",G_VanillaVersionCode());
     if(memcmp(whole+sizeof(h)+SAVESTRINGSIZE,version,VERSIONSIZE)||whole[sizeof(h)+40]!=h.skill||whole[sizeof(h)+41]!=h.episode||whole[sizeof(h)+42]!=h.map||whole[sizeof(h)+43]!=1||whole[sizeof(h)+44]||whole[sizeof(h)+45]||whole[sizeof(h)+46]){snprintf(error,cap,"SAVE_NATIVE_HEADER_INVALID");goto reject;}
@@ -230,6 +245,7 @@ int m1_load_slot(int slot,char *error,unsigned cap){
     if(W_CheckNumForName(mapname)<0){snprintf(error,cap,"SAVE_MAP_INVALID");goto reject;}
     f=M_fopen(raw,"wb");if(!f){snprintf(error,cap,"SAVE_RESTORE_WRITE_FAILED");goto reject;}
     ok=fwrite(whole+sizeof(h),1,h.payload_size,f)==h.payload_size;if(fclose(f))ok=0;if(!ok){snprintf(error,cap,"SAVE_RESTORE_WRITE_FAILED");M_remove(raw);goto reject;}
+    if(m1_interactive_enabled()){crispy->jump=h.jump&3;crispy->freeaim=(h.jump>>2)&3;crispy->overunder=(h.jump>>4)&1;CheckCrispySingleplayer(true);}
     m1_observer_world_begin();G_LoadGame(raw);startloadgame=0;G_DoLoadGame();
     if(gamestate!=GS_LEVEL||gameepisode!=h.episode||gamemap!=h.map||gameskill!=h.skill)m0_fail("SAVE_RESTORE_FAILED");
     restore(whole+sizeof(h)+h.payload_size,h.supplement_size);m1_observer_world_commit();

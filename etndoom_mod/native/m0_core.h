@@ -15,6 +15,10 @@ M0_API uint64_t m1_world_epoch(void);
 M0_API const char *m1_control_status(void);
 int m1_is_paused(void);
 M0_API int m0_step(int forward, int side, int turn, int buttons, int arti);
+/* ABI 2 interactive frontend: raw events, native command builder and menus. */
+M0_API const char *m1_input(int type, int a, int b, int c);
+M0_API int m1_play_tick(void);
+M0_API const char *m1_ui_status(void);
 M0_API const char *m0_snapshot(void);
 /* ABI 2 additive read: bounded flow/world status, without entity/map traversal. */
 M0_API const char *m1_status(void);

@@ -23,6 +23,8 @@
 #include "d_event.h"
 #include "doomkeys.h"
 #include "m1_save.h"
+#include "m1_interactive.h"
+#include "s_sound.h"
 extern int m1_audio_start(void);
 extern void m1_audio_update(void), m1_audio_pause(int), m1_audio_shutdown(void);
 extern void m1_observer_world_begin(void), m1_observer_world_commit(void);
@@ -42,12 +44,18 @@ static char control_result[2048]="{\"request_id\":\"0\",\"ok\":true,\"completed\
 static char last_error[1024], config_dir[4096];
 static char skill_arg[16],map_arg[16],episode_arg[16];
 static char *args[32];
-static uint8_t frame_cache[320*200*4];
+static uint8_t *frame_cache;
+static size_t frame_capacity;
 static void refresh_frame(void){
-    if(SCREENWIDTH!=320 || SCREENHEIGHT!=200)m0_fail("UNEXPECTED_FRAME_SIZE");
+    size_t needed;
     /* Rendering updates native discovery flags. Run exactly at the simulation
      * boundary; public framebuffer reads only copy this cached result. */
-    wipegamestate=gamestate;D_Display();M0_CopyFrame(frame_cache);
+    wipegamestate=gamestate;D_Display();
+    if(m1_interactive_enabled()&&crispy->post_rendering_hook){m1_interactive_post_render();wipegamestate=gamestate;D_Display();}
+    if(SCREENWIDTH<1||SCREENHEIGHT<1||SCREENWIDTH>4096||SCREENHEIGHT>4096)m0_fail("INVALID_FRAME_SIZE");
+    needed=(size_t)SCREENWIDTH*SCREENHEIGHT*4;
+    if(needed>frame_capacity){frame_cache=realloc(frame_cache,needed);if(!frame_cache)m0_fail("FRAME_ALLOC_FAILED");frame_capacity=needed;}
+    M0_CopyFrame(frame_cache);
 }
 const char *m0_build_info(void){return "{\"abi\":2,\"data_schema\":2,\"save_schema\":1,\"core\":\"Crispy Doom 7.2-1\",\"commit\":\"35b49519fb4f0360ee1527e8cf0bdf0b6bbfeff2\",\"ticrate\":35,\"fixed_fraction_bits\":16,\"audio\":true,\"audio_backend\":\"SDL_mixer-OPL\",\"network\":false,\"render\":\"software-paletted-rgba\",\"lifecycle\":\"one-session-per-library-load\"}";}
 const char *m0_error(void){return last_error;}
@@ -110,6 +118,33 @@ int m0_step(int forward,int side,int turn,int buttons,int arti){
     if(completing_confirm)snprintf(control_result,sizeof(control_result),"{\"ok\":true,\"accepted\":true,\"completed\":true,\"queued\":false,\"request_id\":\"%llu\",\"world_epoch\":\"%llu\",\"core_gametic\":%d,\"code\":\"OK\"}",(unsigned long long)confirm_request,(unsigned long long)m1_world_epoch(),gametic);
     guarded=0;return 0;
 }
+const char *m1_input(int type,int a,int b,int c){
+    int was_menu=menuactive,was_interactive=m1_interactive_enabled();uint64_t previous_world=m1_world_epoch();
+    if(!active)return "{\"ok\":false,\"error\":\"NO_ACTIVE_SESSION\"}";
+    if(type<0||type>5||((type==0||type==1)&&(a<0||a>255||b<0||b>127||c<0||c>127))||(type==2&&(a<0||a>65535||b<-32768||b>32767||c<-32768||c>32767))||(type==4&&(a<1||a>32768||b<1||b>32768))||(type==5&&(a<0||a>65536)))return "{\"ok\":false,\"error\":\"INVALID_INPUT\"}";
+    guarded=1;if(setjmp(recovery)){guarded=0;return "{\"ok\":false,\"error\":\"CORE_FAILURE\"}";}
+    m1_interactive_enable();m1_interactive_event(type,a,b,c);
+    if(!was_interactive||((type<3)&&(was_menu||menuactive))||type==4||previous_world!=m1_world_epoch())refresh_frame();
+    if(!m1_observer_ok())m0_fail(m1_observer_error());
+    guarded=0;return m1_ui_status();
+}
+int m1_play_tick(void){
+    ticcmd_t cmds[MAXPLAYERS];
+    if(!active){snprintf(last_error,sizeof(last_error),"NO_ACTIVE_SESSION");return -1;}
+    guarded=1;if(setjmp(recovery)){guarded=0;return -1;}
+    m1_interactive_enable();m1_interactive_executed(0);
+    if(host_paused){guarded=0;return 0;}
+    M_Ticker();
+    if(!menuactive){
+        memset(cmds,0,sizeof(cmds));G_BuildTiccmd(&cmds[0],gametic);
+        if((cmds[0].buttons&(BT_SPECIAL|BT_SPECIALMASK))==(BT_SPECIAL|BTS_PAUSE)){
+            paused=!paused;if(paused)S_PauseSound();else S_ResumeSound();m1_interactive_clear();
+        }else if(!paused){M0_RunTic(cmds);gametic++;m1_interactive_executed(1);}
+    }
+    m1_audio_update();refresh_frame();
+    if(!m1_observer_ok())m0_fail(m1_observer_error());
+    guarded=0;return 0;
+}
 static int valid_map(int episode,int map){
     char name[16];if(gamemode==commercial){if(episode!=0&&episode!=1)return 0;snprintf(name,sizeof(name),"MAP%02d",map);}
     else {if(episode<1||episode>4||map<1||map>9)return 0;snprintf(name,sizeof(name),"E%dM%d",episode,map);}
@@ -129,7 +164,7 @@ const char *m1_control(const char *action,int a,int b,int c,uint64_t request_id)
         if(!m1_observer_ok())m0_fail(m1_observer_error());
         if(!strcmp(action,"pause")){
             if(a!=0&&a!=1)code="INVALID_PAUSE";
-            else{host_paused=a;paused=0;if(confirm_pending)cancelled=confirm_request;confirm_pending=0;m1_audio_pause(a);}
+            else{host_paused=a;if(!m1_interactive_enabled())paused=0;else m1_interactive_clear();if(confirm_pending)cancelled=confirm_request;confirm_pending=0;m1_audio_pause(a);if(!a&&paused)S_PauseSound();}
         } else if(!strcmp(action,"new_game")){
             if(a<1||a>5||!valid_map(b,c))code="INVALID_NEW_GAME";
             else{G_DeferedInitNew(a-1,b?b:1,c);G_DoNewGame();if(confirm_pending)cancelled=confirm_request;confirm_pending=0;}
@@ -162,10 +197,14 @@ int m0_frame(uint8_t *rgba,int capacity){
     int needed=SCREENWIDTH*SCREENHEIGHT*4;
     if(!active){snprintf(last_error,sizeof(last_error),"NO_ACTIVE_SESSION");return -1;}
     if(!rgba||capacity<needed)return needed;
+    if(m1_interactive_enabled()&&crispy->uncapped&&gamestate==GS_LEVEL&&!menuactive&&!paused&&!host_paused){
+        guarded=1;if(setjmp(recovery)){guarded=0;return -1;}refresh_frame();guarded=0;
+        needed=SCREENWIDTH*SCREENHEIGHT*4;if(capacity<needed)return needed;
+    }
     memcpy(rgba,frame_cache,(size_t)needed);return needed;
 }
 void m0_destroy(void){
     active=0;guarded=1;
-    if(!setjmp(recovery)){m1_audio_shutdown();M0_Shutdown();}
+    if(!setjmp(recovery)){m1_interactive_shutdown();m1_audio_shutdown();M0_Shutdown();}
     guarded=0;m0_release_memory();
 }

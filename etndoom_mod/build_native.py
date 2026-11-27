@@ -88,7 +88,7 @@ void I_Error(const char *error, ...) {
         system.write_text(text, encoding="utf-8", newline="\n")
     # Each patch module owns validated upstream anchors; generated trees are
     # rebuilt from the locked archive and are never the source of truth.
-    for name in ("m1_observer_patches", "m1_audio_patches", "m1_save_patches"):
+    for name in ("m1_observer_patches", "m1_audio_patches", "m1_save_patches", "m1_interactive_patches"):
         spec = importlib.util.spec_from_file_location(name, NATIVE / f"{name}.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

@@ -45,6 +45,8 @@ typedef struct {
     int (*step)(int,int,int,int,int);
     const char *(*snapshot)(void);
     const char *(*status)(void);
+    const char *(*input)(int,int,int,int), *(*ui_status)(void);
+    int (*play_tick)(void);
     const char *(*map)(void);
     int (*frame)(uint8_t*,int);
     int (*width)(void), (*height)(void);
@@ -106,8 +108,8 @@ static GDExtensionObjectPtr create_instance(void *unused) {
 static void free_instance(void *unused, GDExtensionClassInstancePtr instance) {
     (void)unused; close_core(instance); free(instance);
 }
-enum { OPEN, STEP, SNAPSHOT, MAP, BUILD_INFO, FRAMEBUFFER, CLOSE, DIMENSIONS, CONTROL, RESOURCES, RESOURCE_READ, EVENTS, ACK_EVENTS, AUDIO_STATUS, AUDIO_VOLUME, STEP_STATUS, STATUS, METHOD_COUNT };
-static const int counts[]={8,5,0,0,0,0,0,0,5,0,4,0,1,0,2,5,0};
+enum { OPEN, STEP, SNAPSHOT, MAP, BUILD_INFO, FRAMEBUFFER, CLOSE, DIMENSIONS, CONTROL, RESOURCES, RESOURCE_READ, EVENTS, ACK_EVENTS, AUDIO_STATUS, AUDIO_VOLUME, STEP_STATUS, STATUS, INPUT_EVENT, PLAY_TICK, UI_STATUS, METHOD_COUNT };
+static const int counts[]={8,5,0,0,0,0,0,0,5,0,4,0,1,0,2,5,0,4,0,0};
 static int is_string_argument(int id,int i) {
     return (id==OPEN && i<4) || (id==CONTROL && i==0);
 }
@@ -141,6 +143,7 @@ static void dispatch(void *method, GDExtensionClassInstancePtr instance,
         RESOLVE(audio_volume,"m1_audio_set_volume");
         RESOLVE(snapshot,"m0_snapshot"); RESOLVE(map,"m0_map"); RESOLVE(frame,"m0_frame");
         RESOLVE(status,"m1_status");
+        RESOLVE(input,"m1_input"); RESOLVE(play_tick,"m1_play_tick"); RESOLVE(ui_status,"m1_ui_status");
         RESOLVE(width,"m0_width"); RESOLVE(height,"m0_height"); RESOLVE(error,"m0_error"); RESOLVE(destroy,"m0_destroy");
         RESOLVE(allocated_bytes,"m0_allocated_bytes"); RESOLVE(allocation_count,"m0_allocation_count");
 #undef RESOLVE
@@ -157,6 +160,9 @@ release_args:
     }
     if(id==BUILD_INFO && !b->core) {return_string(out,"{\"bridge_abi\":2,\"bridge_build\":\"" M1_BRIDGE_BUILD "\",\"core_loaded\":false}");return;}
     if(!b->core) {return_error(out,"state","无活动会话");return;}
+    if(id==INPUT_EVENT){return_string(out,b->input((int)get_int(args[0]),(int)get_int(args[1]),(int)get_int(args[2]),(int)get_int(args[3])));return;}
+    if(id==PLAY_TICK){if(b->play_tick()!=0)return_error(out,"play_tick",b->error());else return_string(out,b->status());return;}
+    if(id==UI_STATUS){return_string(out,b->ui_status());return;}
     if(id==STEP || id==STEP_STATUS) {
         if(b->step((int)get_int(args[0]),(int)get_int(args[1]),(int)get_int(args[2]),(int)get_int(args[3]),(int)get_int(args[4]))!=0) return_error(out,"step",b->error());
         else return_string(out,id==STEP_STATUS?b->status():b->snapshot());
@@ -208,7 +214,7 @@ static void initialize(void *unused,GDExtensionInitializationLevel level) {
     Builtin resize={0};sn_new(&resize,"resize");bytes_resize=builtin_method(GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY,&resize,848867239);destructor(GDEXTENSION_VARIANT_TYPE_STRING_NAME)(&resize);
     GDExtensionClassCreationInfo2 ci={0};ci.is_exposed=1;ci.create_instance_func=create_instance;ci.free_instance_func=free_instance;
     register_class(library,&class_name,&parent_name,&ci);
-    const char *names[]={"open_core","step_core","snapshot_json","map_json","build_info_json","framebuffer","close_core","dimensions_json","control_json","resources_json","resource_read","events_json","ack_events_json","audio_status_json","audio_volume_json","step_status_core","status_json"};
+    const char *names[]={"open_core","step_core","snapshot_json","map_json","build_info_json","framebuffer","close_core","dimensions_json","control_json","resources_json","resource_read","events_json","ack_events_json","audio_status_json","audio_volume_json","step_status_core","status_json","input_json","play_tick_json","ui_status_json"};
     for(int id=0;id<METHOD_COUNT;id++) {
         Builtin name={0},arg_names[8]={0};sn_new(&name,names[id]);
         GDExtensionPropertyInfo ret={0},args[8]={0};GDExtensionClassMethodArgumentMetadata meta[8]={0};
